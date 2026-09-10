@@ -116,6 +116,11 @@ create table if not exists public.user_settings (
   max_session_minutes integer not null default 60,
   buffer_minutes integer not null default 10,
   daily_study_target_minutes integer not null default 120,
+  preferred_study_start_minute integer not null default 900,  -- 15:00
+  preferred_study_end_minute integer not null default 1320,   -- 22:00
+  min_gap_for_study_minutes integer not null default 240,     -- 4h
+  major text,
+  program_intensity smallint check (program_intensity is null or program_intensity between 1 and 5),
   reminders_enabled boolean not null default true,
   reminder_lead_minutes integer not null default 10
 );

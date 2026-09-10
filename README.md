@@ -25,7 +25,12 @@ devices via Supabase.
   a fixed weekly minute target instead.
 - **Automatic weekly planner** — computes your free time around the
   timetable and allocates study sessions into it, capped by a daily study
-  goal so it never eats your whole day.
+  goal so it never eats your whole day. Fills your stated "most productive
+  hours" first; skips short gaps squeezed between back-to-back classes
+  (configurable, default 4h) so real breaks stay breaks; and schedules a
+  review session right before each class (once it's linked to a subject) so
+  you walk in prepared. Your major/program intensity can suggest a sensible
+  daily study goal to start from.
 - **Drag-and-drop editing** — rearrange any generated session by dragging it
   to a new day/time; mark sessions complete or remove them.
 - **Progress dashboard** — minutes studied per subject, weekly trend, plan
@@ -55,8 +60,8 @@ devices via Supabase.
    This creates all tables, row-level security policies, and a trigger that
    sets up default settings for every new user.
    - **Already have a project running this app?** Don't re-run `schema.sql` —
-     instead run [`supabase/migrations/001_add_recurrence.sql`](supabase/migrations/001_add_recurrence.sql)
-     once to add "par quinzaine" (biweekly) support to your existing tables.
+     instead run every file under [`supabase/migrations/`](supabase/migrations) once,
+     in order, to bring your existing tables up to date.
 3. In **Project Settings → API**, copy your **Project URL** and **anon public
    key**.
 4. In **Authentication → Providers**, email sign-up is enabled by default —

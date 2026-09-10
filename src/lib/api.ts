@@ -171,6 +171,11 @@ const DEFAULT_SETTINGS: Omit<UserSettings, 'user_id'> = {
   max_session_minutes: 60,
   buffer_minutes: 10,
   daily_study_target_minutes: 120,
+  preferred_study_start_minute: 900,
+  preferred_study_end_minute: 1320,
+  min_gap_for_study_minutes: 240,
+  major: null,
+  program_intensity: null,
   reminders_enabled: true,
   reminder_lead_minutes: 10,
 }

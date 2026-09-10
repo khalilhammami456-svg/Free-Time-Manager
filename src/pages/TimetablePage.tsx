@@ -5,7 +5,44 @@ import type { ParsedTimetableRow } from '../lib/ocr'
 import { getWeekParity } from '../lib/planner'
 import { minutesToTimeInput, timeInputToMinutes } from '../lib/format'
 import WeekGrid from '../components/WeekGrid'
-import { DAY_LABELS, type DayOfWeek, type Recurrence } from '../types'
+import { DAY_LABELS, type DayOfWeek, type Recurrence, type Subject } from '../types'
+
+/** Best-effort match so an imported class is pre-linked to a subject the user already created. */
+function matchSubjectId(title: string, subjects: Subject[]): string | null {
+  const lower = title.toLowerCase()
+  const found = subjects.find((s) => {
+    const name = s.name.toLowerCase().trim()
+    return name.length > 2 && (lower.includes(name) || name.includes(lower))
+  })
+  return found?.id ?? null
+}
+
+function SubjectSelect({
+  value,
+  subjects,
+  onChange,
+  className,
+}: {
+  value: string | null
+  subjects: Subject[]
+  onChange: (id: string | null) => void
+  className?: string
+}) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      className={className ?? 'rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white outline-none'}
+    >
+      <option value="">No subject</option>
+      {subjects.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </select>
+  )
+}
 
 const THIS_WEEK_PARITY = getWeekParity(startOfWeek(new Date(), { weekStartsOn: 1 }))
 const OTHER_WEEK_PARITY: Recurrence = THIS_WEEK_PARITY === 'odd_weeks' ? 'even_weeks' : 'odd_weeks'
@@ -38,7 +75,7 @@ function RecurrenceSelect({
   )
 }
 
-type OcrRow = ParsedTimetableRow & { include: boolean; recurrence: Recurrence }
+type OcrRow = ParsedTimetableRow & { include: boolean; recurrence: Recurrence; subject_id: string | null }
 
 export default function TimetablePage() {
   const { entries, create, createMany, update, remove } = useTimetable()
@@ -102,7 +139,7 @@ export default function TimetablePage() {
             suggested = seenPairs.has(r.biweeklyPairKey) ? OTHER_WEEK_PARITY : THIS_WEEK_PARITY
             seenPairs.add(r.biweeklyPairKey)
           }
-          return { ...r, include: true, recurrence: suggested }
+          return { ...r, include: true, recurrence: suggested, subject_id: matchSubjectId(r.title, subjects) }
         })
       )
     } catch (err) {
@@ -124,7 +161,7 @@ export default function TimetablePage() {
     await createMany(
       toSave.map((r) => ({
         title: r.title || 'Class',
-        subject_id: null,
+        subject_id: r.subject_id,
         day_of_week: r.day as DayOfWeek,
         start_minute: r.start_minute as number,
         end_minute: r.end_minute as number,
@@ -188,7 +225,9 @@ export default function TimetablePage() {
         {ocrRows && ocrRows.length > 0 && (
           <div className="mt-4 space-y-2">
             <p className="text-xs text-slate-400">
-              Review what we detected and fix anything that's wrong before saving.
+              Review what we detected and fix anything that's wrong before saving. Linking a
+              class to a subject (when we couldn't guess it) lets the planner schedule a review
+              session right before that class.
             </p>
             {biweeklyRowCount > 0 && (
               <p className="rounded-lg border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
@@ -206,6 +245,7 @@ export default function TimetablePage() {
                     <th className="py-1 pr-2">Start</th>
                     <th className="py-1 pr-2">End</th>
                     <th className="py-1 pr-2">Title</th>
+                    <th className="py-1 pr-2">Subject</th>
                     <th className="py-1 pr-2">Repeats</th>
                   </tr>
                 </thead>
@@ -254,6 +294,14 @@ export default function TimetablePage() {
                           value={row.title}
                           onChange={(e) => updateOcrRow(i, { title: e.target.value })}
                           className="w-full min-w-[220px] rounded border border-slate-800 bg-slate-950 px-1 py-0.5 text-white"
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <SubjectSelect
+                          value={row.subject_id}
+                          subjects={subjects}
+                          onChange={(id) => updateOcrRow(i, { subject_id: id })}
+                          className="rounded border border-slate-800 bg-slate-950 px-1 py-0.5 text-white"
                         />
                       </td>
                       <td className="py-1 pr-2">
@@ -377,6 +425,12 @@ export default function TimetablePage() {
                     {minutesToTimeInput(e.start_minute)}–{minutesToTimeInput(e.end_minute)}
                   </span>
                   <span className="min-w-[140px] flex-1 truncate text-slate-200">{e.title}</span>
+                  <SubjectSelect
+                    value={e.subject_id}
+                    subjects={subjects}
+                    onChange={(id) => update(e.id, { subject_id: id })}
+                    className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-300 outline-none"
+                  />
                   <RecurrenceSelect
                     value={e.recurrence}
                     onChange={(r) => update(e.id, { recurrence: r })}

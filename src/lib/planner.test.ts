@@ -10,6 +10,13 @@ const settings: UserSettings = {
   max_session_minutes: 60,
   buffer_minutes: 10,
   daily_study_target_minutes: 120,
+  // Matches the full day window by default so existing tests aren't affected by preferred-hours
+  // prioritization — the dedicated test below narrows this to check the behavior specifically.
+  preferred_study_start_minute: 8 * 60,
+  preferred_study_end_minute: 20 * 60,
+  min_gap_for_study_minutes: 240,
+  major: null,
+  program_intensity: null,
   reminders_enabled: true,
   reminder_lead_minutes: 10,
 }
@@ -19,16 +26,21 @@ const settings: UserSettings = {
 const mondayA = new Date('2026-01-05T00:00:00Z')
 const mondayB = new Date('2026-01-12T00:00:00Z')
 
-function entry(day: number, start: number, end: number, recurrence: Recurrence = 'weekly'): TimetableEntry {
+function entry(
+  day: number,
+  start: number,
+  end: number,
+  opts: { recurrence?: Recurrence; subject_id?: string | null } = {}
+): TimetableEntry {
   return {
-    id: `${day}-${start}-${recurrence}`,
+    id: `${day}-${start}-${opts.recurrence ?? 'weekly'}`,
     user_id: 'u1',
-    subject_id: null,
+    subject_id: opts.subject_id ?? null,
     title: 'class',
     day_of_week: day as TimetableEntry['day_of_week'],
     start_minute: start,
     end_minute: end,
-    recurrence,
+    recurrence: opts.recurrence ?? 'weekly',
     source: 'manual',
     created_at: '',
   }
@@ -59,7 +71,7 @@ describe('computeFreeSlots', () => {
   it('only blocks time for a "par quinzaine" class on weeks matching its parity', () => {
     expect(getWeekParity(mondayA)).not.toBe(getWeekParity(mondayB))
 
-    const biweekly = entry(1, 9 * 60, 11 * 60, getWeekParity(mondayA))
+    const biweekly = entry(1, 9 * 60, 11 * 60, { recurrence: getWeekParity(mondayA) })
     const slotsOnA = computeFreeSlots([biweekly], settings, mondayA).filter((s) => s.day_of_week === 1)
     const slotsOnB = computeFreeSlots([biweekly], settings, mondayB).filter((s) => s.day_of_week === 1)
 
@@ -73,7 +85,7 @@ describe('computeFreeSlots', () => {
   })
 
   it('a "weekly" class blocks time on every week regardless of parity', () => {
-    const weekly = entry(1, 9 * 60, 11 * 60, 'weekly')
+    const weekly = entry(1, 9 * 60, 11 * 60)
     const slotsOnA = computeFreeSlots([weekly], settings, mondayA).filter((s) => s.day_of_week === 1)
     const slotsOnB = computeFreeSlots([weekly], settings, mondayB).filter((s) => s.day_of_week === 1)
     expect(slotsOnA).toEqual(slotsOnB)
@@ -89,7 +101,7 @@ describe('allocateStudyPlan', () => {
 
   it('gives the harder subject more total minutes than the easier one', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
 
     const totalFor = (id: string) =>
       sessions.filter((s) => s.subject_id === id).reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
@@ -99,7 +111,7 @@ describe('allocateStudyPlan', () => {
 
   it('never schedules overlapping sessions within the same slot', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
 
     const byDay = new Map<number, typeof sessions>()
     for (const s of sessions) {
@@ -118,14 +130,14 @@ describe('allocateStudyPlan', () => {
       { id: 'fixed', user_id: 'u1', name: 'Fixed', color: '#000', difficulty: 3, weekly_target_minutes: 50, created_at: '' },
     ]
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects: capped, settings })
+    const sessions = allocateStudyPlan({ freeSlots, subjects: capped, settings, timetable: [] })
     const total = sessions.reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
     expect(total).toBeLessThanOrEqual(50)
   })
 
   it('never schedules more than the daily study target on any single day, leaving real free time', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA) // 12h/day free, but cap is 120min/day
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
 
     const byDay = new Map<number, number>()
     for (const s of sessions) {
@@ -141,7 +153,56 @@ describe('allocateStudyPlan', () => {
   it('returns nothing when there are no free slots', () => {
     const entries = Array.from({ length: 7 }, (_, d) => entry(d, settings.day_start_minute, settings.day_end_minute))
     const freeSlots = computeFreeSlots(entries, settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
     expect(sessions).toEqual([])
+  })
+
+  it('ignores a short gap squeezed between two classes, but keeps a long one', () => {
+    // Mon: class 9-10, gap, class 11-12 (60min gap — too short) — then free the rest of the day.
+    // Tue: class 9-10, gap, class 15-16 (5h gap — long enough) — then free the rest of the day.
+    const entries = [
+      entry(1, 9 * 60, 10 * 60),
+      entry(1, 11 * 60, 12 * 60),
+      entry(2, 9 * 60, 10 * 60),
+      entry(2, 15 * 60, 16 * 60),
+    ]
+    const freeSlots = computeFreeSlots(entries, settings, mondayA)
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+
+    const usesShortMondayGap = sessions.some((s) => s.day_of_week === 1 && s.start_minute >= 600 && s.end_minute <= 660)
+    const usesLongTuesdayGap = sessions.some((s) => s.day_of_week === 2 && s.start_minute >= 600 && s.end_minute <= 900)
+
+    expect(usesShortMondayGap).toBe(false)
+    expect(usesLongTuesdayGap).toBe(true)
+  })
+
+  it('fills the preferred study window before spilling into the rest of the day', () => {
+    const narrow: UserSettings = { ...settings, preferred_study_start_minute: 14 * 60, preferred_study_end_minute: 16 * 60 }
+    const oneSubject: Subject[] = [
+      { id: 'only', user_id: 'u1', name: 'Only', color: '#000', difficulty: 3, weekly_target_minutes: 50, created_at: '' },
+    ]
+    const freeSlots = computeFreeSlots([], narrow, mondayA) // whole day free, 8am-8pm
+    const sessions = allocateStudyPlan({ freeSlots, subjects: oneSubject, settings: narrow, timetable: [] })
+
+    expect(sessions.length).toBeGreaterThan(0)
+    for (const s of sessions) {
+      expect(s.start_minute).toBeGreaterThanOrEqual(14 * 60)
+      expect(s.end_minute).toBeLessThanOrEqual(16 * 60)
+    }
+  })
+
+  it('places a review session right before a subject\'s class, even in an otherwise-too-short gap', () => {
+    // A 60-minute gap (9-10) right before the "hard" class at 10 — normally excluded by the
+    // 4h interior-gap rule, but the strategic pass should still use it for prep.
+    const entries = [
+      entry(1, 8 * 60, 9 * 60),
+      entry(1, 10 * 60, 11 * 60, { subject_id: 'hard' }),
+    ]
+    const freeSlots = computeFreeSlots(entries, settings, mondayA)
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: entries })
+
+    const prep = sessions.find((s) => s.subject_id === 'hard' && s.day_of_week === 1 && s.end_minute === 600)
+    expect(prep).toBeTruthy()
+    expect(prep!.start_minute).toBeGreaterThanOrEqual(540)
   })
 })

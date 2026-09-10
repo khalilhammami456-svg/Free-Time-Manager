@@ -53,6 +53,15 @@ export interface UserSettings {
   max_session_minutes: number
   buffer_minutes: number
   daily_study_target_minutes: number // caps how much of each day's free time becomes study time, so real free time survives
+  // The window within day_start/day_end when the user is actually most focused — the planner
+  // fills this first and only spills into the rest of the day if it isn't enough.
+  preferred_study_start_minute: number
+  preferred_study_end_minute: number
+  // A free gap squeezed between two classes only counts as usable study time once it's at
+  // least this long; short breaks between back-to-back classes stay real breaks.
+  min_gap_for_study_minutes: number
+  major: string | null
+  program_intensity: Difficulty | null
   reminders_enabled: boolean
   reminder_lead_minutes: number
 }
@@ -83,4 +92,8 @@ export const SUBJECT_COLORS = [
   '#008300', // green
   '#9085e9', // violet
   '#e66767', // red
+  '#1ba3c4', // cyan
+  '#a3672a', // brown
+  '#c45fc4', // pink
+  '#6b8f1f', // lime
 ]
