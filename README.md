@@ -31,12 +31,26 @@ devices via Supabase.
   review session right before each class (once it's linked to a subject) so
   you walk in prepared. Your major/program intensity can suggest a sensible
   daily study goal to start from.
-- **Exams** — add exam dates per subject; the planner automatically shifts
-  more study time to a subject the closer its exam gets (a flat boost within
-  exam week, tapering off over the 3 weeks before), pulling time away from
-  subjects without one coming up.
-- **Drag-and-drop editing** — rearrange any generated session by dragging it
-  to a new day/time; mark sessions complete or remove them.
+- **Exams** — add exam dates per subject, either by hand or by scanning a
+  photo/PDF of an exam schedule (same on-device OCR/PDF pipeline as the
+  timetable import, with an editable review table before saving). The
+  planner automatically shifts more study time to a subject the closer its
+  exam gets (a flat boost within exam week, tapering off over the 3 weeks
+  before), pulling time away from subjects without one coming up.
+- **"When do you want to study?" prompt** — before generating a plan, pick
+  your preferred study window for the week (a preset like morning/evening,
+  or a custom range), instead of the app assuming everyone wants to study at
+  the same time of day. Optionally save it as your default.
+- **Drag-and-drop + direct editing** — rearrange any generated session by
+  dragging it to a new day/time, or open its ⋯ menu to edit the day, start
+  time, and duration precisely (e.g. shrink a session because you finished
+  early or stretch it because you need more time), start a focus session,
+  mark it complete, or remove it.
+- **Focus/study timer** — tap a planned session to start a full-screen
+  countdown timer with pause/resume, a quick "+10 min" extension, and a
+  "Done" button that saves your actual studied time. Stopping early asks why
+  (too tired, got distracted, ran out of time, changed my mind, or a custom
+  reason) so you can see patterns later.
 - **Progress dashboard** — minutes studied per subject, weekly trend, plan
   adherence, and a day streak.
 - **Reminders** — browser notifications shortly before a session starts.

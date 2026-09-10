@@ -295,6 +295,190 @@ async function fileToImageDataUrl(file: File): Promise<string> {
   return URL.createObjectURL(file)
 }
 
+// ---------------------------------------------------------------------------
+// Exam schedule import — dates instead of days-of-week, otherwise the same
+// two-tier strategy: read a native PDF's text layer directly, fall back to
+// on-device OCR for photos/scanned PDFs.
+// ---------------------------------------------------------------------------
+
+const MONTH_NAME_TO_INDEX: Record<string, number> = {
+  janvier: 1, january: 1, jan: 1,
+  février: 2, fevrier: 2, february: 2, feb: 2,
+  mars: 3, march: 3, mar: 3,
+  avril: 4, april: 4, apr: 4,
+  mai: 5, may: 5,
+  juin: 6, june: 6, jun: 6,
+  juillet: 7, july: 7, jul: 7,
+  août: 8, aout: 8, august: 8, aug: 8,
+  septembre: 9, september: 9, sep: 9, sept: 9,
+  octobre: 10, october: 10, oct: 10,
+  novembre: 11, november: 11, nov: 11,
+  décembre: 12, decembre: 12, december: 12, dec: 12,
+}
+const MONTH_NAMES_PATTERN = Object.keys(MONTH_NAME_TO_INDEX)
+  .sort((a, b) => b.length - a.length)
+  .join('|')
+const MONTH_NAME_RE_GLOBAL = new RegExp(`\\b(${MONTH_NAMES_PATTERN})\\.?\\b`, 'gi')
+
+function isoDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/** Best-effort date parser covering ISO, DD/MM/YYYY, and "14 September" / "September 14" forms. */
+function parseDateFromLine(line: string, referenceDate: Date): string | null {
+  let m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(line)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+
+  m = /\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/.exec(line)
+  if (m) {
+    const day = parseInt(m[1], 10)
+    const month = parseInt(m[2], 10)
+    let year = parseInt(m[3], 10)
+    if (year < 100) year += 2000
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) return isoDate(year, month, day)
+  }
+
+  const dayMonthRe = new RegExp(`\\b(\\d{1,2})\\s+(${MONTH_NAMES_PATTERN})\\.?\\s*(\\d{4})?\\b`, 'i')
+  m = dayMonthRe.exec(line)
+  if (m) {
+    const day = parseInt(m[1], 10)
+    const month = MONTH_NAME_TO_INDEX[m[2].toLowerCase()]
+    const year = m[3] ? parseInt(m[3], 10) : referenceDate.getFullYear()
+    return rollForwardIfPast(isoDate(year, month, day), referenceDate, !m[3])
+  }
+
+  const monthDayRe = new RegExp(`\\b(${MONTH_NAMES_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i')
+  m = monthDayRe.exec(line)
+  if (m) {
+    const month = MONTH_NAME_TO_INDEX[m[1].toLowerCase()]
+    const day = parseInt(m[2], 10)
+    return rollForwardIfPast(isoDate(referenceDate.getFullYear(), month, day), referenceDate, true)
+  }
+
+  return null
+}
+
+/** A year-less date more than ~2 months in the past is almost certainly meant for next year. */
+function rollForwardIfPast(candidate: string, referenceDate: Date, allowRoll: boolean): string {
+  if (!allowRoll) return candidate
+  const diffDays = (new Date(candidate).getTime() - referenceDate.getTime()) / 86_400_000
+  if (diffDays < -60) {
+    const [y, mo, d] = candidate.split('-').map(Number)
+    return isoDate(y + 1, mo, d)
+  }
+  return candidate
+}
+
+export interface ParsedExamRow {
+  raw: string
+  exam_date: string | null // ISO yyyy-MM-dd
+  start_minute: number | null
+  end_minute: number | null
+  subject_guess: string
+}
+
+/** Turns raw text (from a PDF's text layer or OCR) into best-guess exam rows for review. */
+export function parseExamScheduleText(text: string, referenceDate: Date = new Date()): ParsedExamRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  const rows: ParsedExamRow[] = []
+  let currentDate: string | null = null
+
+  for (const line of lines) {
+    const date = parseDateFromLine(line, referenceDate)
+    if (date) currentDate = date
+
+    const timeMatch = LOOSE_TIME_RE.exec(line)
+    if (!timeMatch) continue
+
+    const [, h1, m1, ampm1, h2, m2, ampm2] = timeMatch
+    const start_minute = to24hLoose(h1, m1, ampm1, ampm2)
+    const end_minute = to24hLoose(h2, m2, ampm2, ampm1)
+    if (end_minute <= start_minute) continue
+
+    let subject_guess = line
+      .replace(LOOSE_TIME_RE, ' ')
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
+      .replace(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g, ' ')
+      .replace(MONTH_NAME_RE_GLOBAL, ' ')
+      .replace(/\b\d{1,2}(st|nd|rd|th)\b/gi, ' ')
+      .replace(/[|,;:_\-–—]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!subject_guess) subject_guess = 'Exam'
+
+    rows.push({ raw: line, exam_date: date ?? currentDate, start_minute, end_minute, subject_guess })
+  }
+
+  return rows
+}
+
+/** Reads a PDF's text layer as plain reading-order lines (not grid-clustered — exam schedules
+ * are usually simple lists/tables, unlike the weekly day/time grid a class timetable uses). */
+async function extractPdfPlainText(file: File): Promise<string | null> {
+  const buffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  const lines: string[] = []
+  let totalChars = 0
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum)
+    const content = await page.getTextContent()
+    const items: PositionedItem[] = content.items
+      .map((it) => {
+        const anyIt = it as { str?: string; transform?: number[] }
+        return { str: (anyIt.str ?? '').trim(), x: Math.round(anyIt.transform?.[4] ?? 0), y: Math.round(anyIt.transform?.[5] ?? 0) }
+      })
+      .filter((it) => it.str.length > 0)
+    totalChars += items.reduce((sum, it) => sum + it.str.length, 0)
+
+    items.sort((a, b) => b.y - a.y || a.x - b.x)
+    let lastY: number | null = null
+    let currentLine: string[] = []
+    for (const it of items) {
+      if (lastY !== null && Math.abs(it.y - lastY) > 4) {
+        lines.push(currentLine.join(' '))
+        currentLine = []
+      }
+      currentLine.push(it.str)
+      lastY = it.y
+    }
+    if (currentLine.length) lines.push(currentLine.join(' '))
+  }
+
+  if (totalChars < 20) return null // scanned/image-only PDF — fall back to OCR
+  return lines.join('\n')
+}
+
+export async function extractExamScheduleFromFile(
+  file: File,
+  onProgress?: (status: string, progress: number) => void
+): Promise<{ text: string; rows: ParsedExamRow[]; method: ExtractionMethod }> {
+  if (file.type === 'application/pdf') {
+    onProgress?.('reading pdf text', 0.2)
+    const text = await extractPdfPlainText(file)
+    if (text) {
+      onProgress?.('done', 1)
+      return { text, rows: parseExamScheduleText(text), method: 'pdf-text' }
+    }
+  }
+
+  const imageSource = await fileToImageDataUrl(file)
+  const worker = await createWorker('eng', undefined, {
+    logger: (m) => onProgress?.(m.status, m.progress),
+  })
+
+  try {
+    const { data } = await worker.recognize(imageSource)
+    return { text: data.text, rows: parseExamScheduleText(data.text), method: 'ocr-image' }
+  } finally {
+    await worker.terminate()
+  }
+}
+
 export type ExtractionMethod = 'pdf-text' | 'ocr-image'
 
 export async function extractTimetableFromFile(

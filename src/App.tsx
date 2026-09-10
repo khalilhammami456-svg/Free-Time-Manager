@@ -11,6 +11,7 @@ const SubjectsPage = lazy(() => import('./pages/SubjectsPage'))
 const ExamsPage = lazy(() => import('./pages/ExamsPage'))
 const StatsPage = lazy(() => import('./pages/StatsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const StudyTimerPage = lazy(() => import('./pages/StudyTimerPage'))
 
 function ReminderWatcher() {
   useReminders()
@@ -77,6 +78,14 @@ export default function App() {
             }
           />
         </Route>
+        <Route
+          path="/study"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <StudyTimerPage />
+            </Suspense>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

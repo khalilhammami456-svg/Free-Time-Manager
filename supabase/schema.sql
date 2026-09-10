@@ -93,6 +93,7 @@ create table if not exists public.study_sessions (
   status text not null default 'planned' check (status in ('planned', 'completed', 'skipped')),
   source text not null default 'auto' check (source in ('auto', 'manual')),
   week_start date not null,
+  skip_reason text,
   created_at timestamptz not null default now(),
   constraint valid_session_range check (end_minute > start_minute)
 );

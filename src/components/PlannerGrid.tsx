@@ -12,6 +12,7 @@ interface PlannerGridProps {
   onSessionMove: (sessionId: string, day: DayOfWeek, startMinute: number) => void
   onSessionToggle: (sessionId: string) => void
   onSessionRemove: (sessionId: string) => void
+  onSessionClick: (session: StudySession) => void
 }
 
 function DayColumn({
@@ -42,6 +43,7 @@ function SessionBlock({
   height,
   onToggle,
   onRemove,
+  onOpenActions,
 }: {
   session: StudySession
   subject: Subject | undefined
@@ -49,6 +51,7 @@ function SessionBlock({
   height: number
   onToggle: () => void
   onRemove: () => void
+  onOpenActions: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: session.id })
   const color = subject?.color ?? '#6366f1'
@@ -74,7 +77,10 @@ function SessionBlock({
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={onToggle}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggle()
+            }}
             title={session.status === 'completed' ? 'Mark planned' : 'Mark complete'}
             className="rounded bg-black/30 px-1 text-[10px] leading-4"
           >
@@ -83,11 +89,26 @@ function SessionBlock({
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={onRemove}
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove()
+            }}
             title="Remove"
             className="rounded bg-black/30 px-1 text-[10px] leading-4"
           >
             ✕
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenActions()
+            }}
+            title="More options"
+            className="rounded bg-black/30 px-1 text-[10px] leading-4"
+          >
+            ⋯
           </button>
         </span>
       </div>
@@ -105,6 +126,7 @@ export default function PlannerGrid({
   onSessionMove,
   onSessionToggle,
   onSessionRemove,
+  onSessionClick,
 }: PlannerGridProps) {
   const totalMinutes = dayEndMinute - dayStartMinute
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -196,6 +218,7 @@ export default function PlannerGrid({
                     height={s.end_minute - s.start_minute}
                     onToggle={() => onSessionToggle(s.id)}
                     onRemove={() => onSessionRemove(s.id)}
+                    onOpenActions={() => onSessionClick(s)}
                   />
                 ))}
             </DayColumn>

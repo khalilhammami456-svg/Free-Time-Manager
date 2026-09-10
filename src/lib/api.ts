@@ -153,11 +153,22 @@ export const sessionsApi = {
 
   update: (
     id: string,
-    patch: Partial<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute' | 'status' | 'source'>>
+    patch: Partial<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute' | 'status' | 'source' | 'skip_reason'>>
   ) => unwrap<StudySession[]>(supabase.from('study_sessions').update(patch).eq('id', id).select()).then((rows) => rows[0]),
 
   setStatus: (id: string, status: SessionStatus) =>
     unwrap<StudySession[]>(supabase.from('study_sessions').update({ status }).eq('id', id).select()).then((rows) => rows[0]),
+
+  /** Ends a focus session early (or on time): shrinks it to the minutes actually studied and marks it complete. */
+  finishEarly: (id: string, actualEndMinute: number) =>
+    unwrap<StudySession[]>(
+      supabase.from('study_sessions').update({ end_minute: actualEndMinute, status: 'completed' as const }).eq('id', id).select()
+    ).then((rows) => rows[0]),
+
+  abort: (id: string, reason: string) =>
+    unwrap<StudySession[]>(
+      supabase.from('study_sessions').update({ status: 'skipped' as const, skip_reason: reason }).eq('id', id).select()
+    ).then((rows) => rows[0]),
 
   remove: (id: string) => unwrap(supabase.from('study_sessions').delete().eq('id', id).select()),
 }

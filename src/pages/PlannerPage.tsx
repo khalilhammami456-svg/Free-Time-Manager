@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { addWeeks, differenceInCalendarDays, format, parseISO, startOfWeek } from 'date-fns'
 import { useExams, useSettings, useSubjects, useTimetable, useWeekSessions } from '../lib/hooks'
 import { useAuth } from '../lib/AuthContext'
 import { generatePlan, isEntryActiveForWeek } from '../lib/planner'
 import { sessionsApi } from '../lib/api'
 import PlannerGrid from '../components/PlannerGrid'
+import StudyTimePrompt from '../components/StudyTimePrompt'
+import SessionActionModal from '../components/SessionActionModal'
 import { durationLabel } from '../lib/format'
-import type { DayOfWeek } from '../types'
+import type { DayOfWeek, StudySession } from '../types'
 
 export default function PlannerPage() {
   const [weekOffset, setWeekOffset] = useState(0)
@@ -16,10 +19,13 @@ export default function PlannerPage() {
   const { user } = useAuth()
   const { subjects } = useSubjects()
   const { entries } = useTimetable()
-  const { settings } = useSettings()
+  const { settings, update: updateSettings } = useSettings()
   const { exams } = useExams()
   const { sessions, setSessions } = useWeekSessions(weekStart)
   const [generating, setGenerating] = useState(false)
+  const [showStudyTimePrompt, setShowStudyTimePrompt] = useState(false)
+  const [selectedSession, setSelectedSession] = useState<StudySession | null>(null)
+  const navigate = useNavigate()
 
   const upcomingExams = useMemo(
     () =>
@@ -37,13 +43,18 @@ export default function PlannerPage() {
     [entries, weekStartDate]
   )
 
-  const handleGenerate = async () => {
+  const handleGenerateWithTimes = async (preferredStart: number, preferredEnd: number, saveAsDefault: boolean) => {
     if (!settings || !user) return
+    setShowStudyTimePrompt(false)
     setGenerating(true)
     try {
-      const { sessions: planned } = generatePlan(entries, subjects, settings, weekStartDate, exams)
+      const effectiveSettings = { ...settings, preferred_study_start_minute: preferredStart, preferred_study_end_minute: preferredEnd }
+      const { sessions: planned } = generatePlan(entries, subjects, effectiveSettings, weekStartDate, exams)
       const saved = await sessionsApi.replaceAutoForWeek(user.id, weekStart, planned)
       setSessions((prev) => [...prev.filter((s) => s.source === 'manual'), ...saved])
+      if (saveAsDefault) {
+        await updateSettings({ preferred_study_start_minute: preferredStart, preferred_study_end_minute: preferredEnd })
+      }
     } finally {
       setGenerating(false)
     }
@@ -79,6 +90,17 @@ export default function PlannerPage() {
   const handleRemove = async (sessionId: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== sessionId))
     await sessionsApi.remove(sessionId)
+  }
+
+  const handleEdit = async (sessionId: string, patch: { day_of_week: DayOfWeek; start_minute: number; end_minute: number }) => {
+    setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, ...patch, source: 'manual' } : s)))
+    await sessionsApi.update(sessionId, { ...patch, source: 'manual' })
+    setSelectedSession(null)
+  }
+
+  const handleStartStudy = (session: StudySession) => {
+    const subject = subjects.find((s) => s.id === session.subject_id)
+    navigate('/study', { state: { session, subject } })
   }
 
   const totalsBySubject = useMemo(() => {
@@ -120,7 +142,7 @@ export default function PlannerPage() {
             Next →
           </button>
           <button
-            onClick={handleGenerate}
+            onClick={() => setShowStudyTimePrompt(true)}
             disabled={generating || subjects.length === 0}
             className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
           >
@@ -176,11 +198,39 @@ export default function PlannerPage() {
           onSessionMove={handleMove}
           onSessionToggle={handleToggle}
           onSessionRemove={handleRemove}
+          onSessionClick={setSelectedSession}
         />
       )}
       <p className="text-xs text-slate-500">
-        Drag a session to reschedule it. Hover a block for options to mark it done or remove it.
+        Drag a session to reschedule it. Hover a block and tap ⋯ to study, edit, or remove it.
       </p>
+
+      {showStudyTimePrompt && settings && (
+        <StudyTimePrompt
+          initialStart={settings.preferred_study_start_minute}
+          initialEnd={settings.preferred_study_end_minute}
+          onConfirm={handleGenerateWithTimes}
+          onClose={() => setShowStudyTimePrompt(false)}
+        />
+      )}
+
+      {selectedSession && (
+        <SessionActionModal
+          session={selectedSession}
+          subject={subjects.find((s) => s.id === selectedSession.subject_id)}
+          onClose={() => setSelectedSession(null)}
+          onStartStudy={() => handleStartStudy(selectedSession)}
+          onSaveEdit={(patch) => handleEdit(selectedSession.id, patch)}
+          onToggle={() => {
+            handleToggle(selectedSession.id)
+            setSelectedSession(null)
+          }}
+          onRemove={() => {
+            handleRemove(selectedSession.id)
+            setSelectedSession(null)
+          }}
+        />
+      )}
     </div>
   )
 }
