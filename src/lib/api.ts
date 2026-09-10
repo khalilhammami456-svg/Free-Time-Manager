@@ -1,0 +1,190 @@
+import { supabase } from './supabase'
+import type {
+  Subject,
+  TimetableEntry,
+  StudySession,
+  UserSettings,
+  Difficulty,
+  DayOfWeek,
+  SessionStatus,
+} from '../types'
+
+async function unwrap<T>(promise: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
+  const { data, error } = await promise
+  if (error) throw new Error(error.message)
+  return data as T
+}
+
+// ---------------------------------------------------------------------------
+// Subjects
+// ---------------------------------------------------------------------------
+export const subjectsApi = {
+  list: (userId: string) =>
+    unwrap<Subject[]>(
+      supabase.from('subjects').select('*').eq('user_id', userId).order('created_at')
+    ),
+
+  create: (userId: string, input: { name: string; color: string; difficulty: Difficulty; weekly_target_minutes?: number | null }) =>
+    unwrap<Subject[]>(
+      supabase
+        .from('subjects')
+        .insert({ user_id: userId, ...input })
+        .select()
+    ).then((rows) => rows[0]),
+
+  update: (id: string, patch: Partial<Pick<Subject, 'name' | 'color' | 'difficulty' | 'weekly_target_minutes'>>) =>
+    unwrap<Subject[]>(supabase.from('subjects').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  remove: (id: string) => unwrap(supabase.from('subjects').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Timetable entries
+// ---------------------------------------------------------------------------
+export const timetableApi = {
+  list: (userId: string) =>
+    unwrap<TimetableEntry[]>(
+      supabase.from('timetable_entries').select('*').eq('user_id', userId).order('day_of_week').order('start_minute')
+    ),
+
+  create: (
+    userId: string,
+    input: {
+      title: string
+      subject_id: string | null
+      day_of_week: DayOfWeek
+      start_minute: number
+      end_minute: number
+      source?: 'manual' | 'ocr'
+    }
+  ) =>
+    unwrap<TimetableEntry[]>(
+      supabase
+        .from('timetable_entries')
+        .insert({ user_id: userId, source: 'manual', ...input })
+        .select()
+    ).then((rows) => rows[0]),
+
+  createMany: (
+    userId: string,
+    entries: Array<{
+      title: string
+      subject_id: string | null
+      day_of_week: DayOfWeek
+      start_minute: number
+      end_minute: number
+      source?: 'manual' | 'ocr'
+    }>
+  ) =>
+    unwrap<TimetableEntry[]>(
+      supabase
+        .from('timetable_entries')
+        .insert(entries.map((e) => ({ user_id: userId, source: 'manual', ...e })))
+        .select()
+    ),
+
+  update: (
+    id: string,
+    patch: Partial<Pick<TimetableEntry, 'title' | 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute'>>
+  ) => unwrap<TimetableEntry[]>(supabase.from('timetable_entries').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  remove: (id: string) => unwrap(supabase.from('timetable_entries').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Study sessions
+// ---------------------------------------------------------------------------
+export const sessionsApi = {
+  listForWeek: (userId: string, weekStart: string) =>
+    unwrap<StudySession[]>(
+      supabase
+        .from('study_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('week_start', weekStart)
+        .order('day_of_week')
+        .order('start_minute')
+    ),
+
+  listInRange: (userId: string, fromWeekStart: string, toWeekStart: string) =>
+    unwrap<StudySession[]>(
+      supabase
+        .from('study_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('week_start', fromWeekStart)
+        .lte('week_start', toWeekStart)
+    ),
+
+  replaceAutoForWeek: async (
+    userId: string,
+    weekStart: string,
+    sessions: Array<Pick<StudySession, 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute'>>
+  ) => {
+    const { error: deleteError } = await supabase
+      .from('study_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('week_start', weekStart)
+      .eq('source', 'auto')
+    if (deleteError) throw new Error(deleteError.message)
+
+    if (sessions.length === 0) return [] as StudySession[]
+
+    return unwrap<StudySession[]>(
+      supabase
+        .from('study_sessions')
+        .insert(
+          sessions.map((s) => ({
+            user_id: userId,
+            week_start: weekStart,
+            source: 'auto' as const,
+            status: 'planned' as const,
+            ...s,
+          }))
+        )
+        .select()
+    )
+  },
+
+  update: (
+    id: string,
+    patch: Partial<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute' | 'status' | 'source'>>
+  ) => unwrap<StudySession[]>(supabase.from('study_sessions').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  setStatus: (id: string, status: SessionStatus) =>
+    unwrap<StudySession[]>(supabase.from('study_sessions').update({ status }).eq('id', id).select()).then((rows) => rows[0]),
+
+  remove: (id: string) => unwrap(supabase.from('study_sessions').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+const DEFAULT_SETTINGS: Omit<UserSettings, 'user_id'> = {
+  day_start_minute: 420,
+  day_end_minute: 1380,
+  min_session_minutes: 25,
+  max_session_minutes: 60,
+  buffer_minutes: 10,
+  daily_study_target_minutes: 120,
+  reminders_enabled: true,
+  reminder_lead_minutes: 10,
+}
+
+export const settingsApi = {
+  get: async (userId: string): Promise<UserSettings> => {
+    const { data, error } = await supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle()
+    if (error) throw new Error(error.message)
+    if (data) return data as UserSettings
+    return unwrap<UserSettings[]>(
+      supabase
+        .from('user_settings')
+        .insert({ user_id: userId, ...DEFAULT_SETTINGS })
+        .select()
+    ).then((rows) => rows[0])
+  },
+
+  update: (userId: string, patch: Partial<Omit<UserSettings, 'user_id'>>) =>
+    unwrap<UserSettings[]>(supabase.from('user_settings').update(patch).eq('user_id', userId).select()).then((rows) => rows[0]),
+}
