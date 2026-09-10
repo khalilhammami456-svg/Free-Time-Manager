@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { settingsApi, subjectsApi, timetableApi, sessionsApi } from './api'
-import type { Difficulty, StudySession, Subject, TimetableEntry, UserSettings } from '../types'
+import { settingsApi, subjectsApi, timetableApi, sessionsApi, examsApi } from './api'
+import type { Difficulty, Exam, StudySession, Subject, TimetableEntry, UserSettings } from '../types'
 
 export function useSubjects() {
   const { user } = useAuth()
@@ -117,6 +117,46 @@ export function useSettings() {
   }
 
   return { settings, loading, update, reload }
+}
+
+export function useExams() {
+  const { user } = useAuth()
+  const [exams, setExams] = useState<Exam[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      setExams(await examsApi.list(user.id))
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const create = async (input: Parameters<typeof examsApi.create>[1]) => {
+    if (!user) return
+    const exam = await examsApi.create(user.id, input)
+    setExams((prev) => [...prev, exam].sort((a, b) => a.exam_date.localeCompare(b.exam_date)))
+    return exam
+  }
+
+  const update = async (id: string, patch: Parameters<typeof examsApi.update>[1]) => {
+    const updated = await examsApi.update(id, patch)
+    setExams((prev) => prev.map((e) => (e.id === id ? updated : e)))
+    return updated
+  }
+
+  const remove = async (id: string) => {
+    await examsApi.remove(id)
+    setExams((prev) => prev.filter((e) => e.id !== id))
+  }
+
+  return { exams, loading, create, update, remove, reload }
 }
 
 export function useWeekSessions(weekStart: string) {

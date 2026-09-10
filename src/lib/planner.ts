@@ -1,5 +1,5 @@
-import { getISOWeek } from 'date-fns'
-import type { DayOfWeek, FreeSlot, Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
+import { differenceInCalendarDays, getISOWeek, parseISO } from 'date-fns'
+import type { DayOfWeek, Exam, FreeSlot, Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
 
 export interface PlannedSession {
   subject_id: string
@@ -86,12 +86,38 @@ function splitByPreferredWindow(slot: FreeSlot, prefStart: number, prefEnd: numb
   return pieces
 }
 
+/**
+ * How much extra weight a subject's proportional share gets based on how soon its next exam
+ * falls, relative to the week being planned. Flat 3x once the exam is within this week, tapers
+ * linearly down to 1x (no boost) by three weeks out, and 1x beyond that or with no exam at all.
+ */
+function examUrgencyMultiplier(daysUntilExam: number | null): number {
+  if (daysUntilExam === null || daysUntilExam < 0 || daysUntilExam > 21) return 1
+  if (daysUntilExam <= 6) return 3
+  return 1 + (2 * (21 - daysUntilExam)) / (21 - 6)
+}
+
+/** For each subject, the smallest non-negative day-gap to one of its exams from `weekStart`. */
+function nextExamDaysBySubject(exams: Exam[], weekStart: Date): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const exam of exams) {
+    const days = differenceInCalendarDays(parseISO(exam.exam_date), weekStart)
+    if (days < 0) continue
+    const current = map.get(exam.subject_id)
+    if (current === undefined || days < current) map.set(exam.subject_id, days)
+  }
+  return map
+}
+
 interface AllocationInput {
   freeSlots: FreeSlot[]
   subjects: Subject[]
   settings: UserSettings
   /** This week's active classes — used to place a review session right before each one. */
   timetable: TimetableEntry[]
+  /** All the user's exams and the week being planned — used to ramp up study time as an exam nears. */
+  exams: Exam[]
+  weekStart: Date
 }
 
 /**
@@ -106,8 +132,11 @@ interface AllocationInput {
  * 3. Before any of that, each subject gets one review session in the free time immediately
  *    before its next class this week, so the user walks in prepared — this is a deliberate
  *    exception to rule 1, since a short pre-class review is still worth having.
+ * 4. A subject with an exam coming up gets a bigger share of the pool the closer it gets,
+ *    pulling time away from subjects without one (explicit weekly-target subjects are exempt —
+ *    that number is an intentional override, not something to silently inflate).
  */
-export function allocateStudyPlan({ freeSlots, subjects, settings, timetable }: AllocationInput): PlannedSession[] {
+export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, exams, weekStart }: AllocationInput): PlannedSession[] {
   if (subjects.length === 0 || freeSlots.length === 0) return []
 
   const sessions: PlannedSession[] = []
@@ -133,9 +162,11 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable }: 
   explicitTotal = Math.min(explicitTotal, weeklyPool)
 
   const pool = Math.max(0, weeklyPool - explicitTotal)
-  const totalWeight = proportionalSubjects.reduce((sum, s) => sum + s.difficulty, 0)
+  const nextExamDays = nextExamDaysBySubject(exams, weekStart)
+  const weightOf = (s: Subject) => s.difficulty * examUrgencyMultiplier(nextExamDays.get(s.id) ?? null)
+  const totalWeight = proportionalSubjects.reduce((sum, s) => sum + weightOf(s), 0)
   for (const s of proportionalSubjects) {
-    const share = totalWeight > 0 ? (s.difficulty / totalWeight) * pool : 0
+    const share = totalWeight > 0 ? (weightOf(s) / totalWeight) * pool : 0
     remaining.set(s.id, Math.round(share))
   }
 
@@ -234,10 +265,11 @@ export function generatePlan(
   entries: TimetableEntry[],
   subjects: Subject[],
   settings: UserSettings,
-  weekStart: Date
+  weekStart: Date,
+  exams: Exam[] = []
 ): { freeSlots: FreeSlot[]; sessions: PlannedSession[] } {
   const activeEntries = entries.filter((e) => isEntryActiveForWeek(e, weekStart))
   const freeSlots = computeFreeSlots(entries, settings, weekStart)
-  const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: activeEntries })
+  const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: activeEntries, exams, weekStart })
   return { freeSlots, sessions }
 }

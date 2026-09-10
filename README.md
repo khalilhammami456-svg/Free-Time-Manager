@@ -31,6 +31,10 @@ devices via Supabase.
   review session right before each class (once it's linked to a subject) so
   you walk in prepared. Your major/program intensity can suggest a sensible
   daily study goal to start from.
+- **Exams** — add exam dates per subject; the planner automatically shifts
+  more study time to a subject the closer its exam gets (a flat boost within
+  exam week, tapering off over the 3 weeks before), pulling time away from
+  subjects without one coming up.
 - **Drag-and-drop editing** — rearrange any generated session by dragging it
   to a new day/time; mark sessions complete or remove them.
 - **Progress dashboard** — minutes studied per subject, weekly trend, plan

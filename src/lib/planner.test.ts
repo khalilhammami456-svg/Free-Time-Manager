@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { allocateStudyPlan, computeFreeSlots, getWeekParity } from './planner'
-import type { Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
+import type { Exam, Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
 
 const settings: UserSettings = {
   user_id: 'u1',
@@ -101,7 +101,7 @@ describe('allocateStudyPlan', () => {
 
   it('gives the harder subject more total minutes than the easier one', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [], exams: [], weekStart: mondayA })
 
     const totalFor = (id: string) =>
       sessions.filter((s) => s.subject_id === id).reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
@@ -111,7 +111,7 @@ describe('allocateStudyPlan', () => {
 
   it('never schedules overlapping sessions within the same slot', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [], exams: [], weekStart: mondayA })
 
     const byDay = new Map<number, typeof sessions>()
     for (const s of sessions) {
@@ -130,14 +130,14 @@ describe('allocateStudyPlan', () => {
       { id: 'fixed', user_id: 'u1', name: 'Fixed', color: '#000', difficulty: 3, weekly_target_minutes: 50, created_at: '' },
     ]
     const freeSlots = computeFreeSlots([], settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects: capped, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects: capped, settings, timetable: [], exams: [], weekStart: mondayA })
     const total = sessions.reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
     expect(total).toBeLessThanOrEqual(50)
   })
 
   it('never schedules more than the daily study target on any single day, leaving real free time', () => {
     const freeSlots = computeFreeSlots([], settings, mondayA) // 12h/day free, but cap is 120min/day
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [], exams: [], weekStart: mondayA })
 
     const byDay = new Map<number, number>()
     for (const s of sessions) {
@@ -153,7 +153,7 @@ describe('allocateStudyPlan', () => {
   it('returns nothing when there are no free slots', () => {
     const entries = Array.from({ length: 7 }, (_, d) => entry(d, settings.day_start_minute, settings.day_end_minute))
     const freeSlots = computeFreeSlots(entries, settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [], exams: [], weekStart: mondayA })
     expect(sessions).toEqual([])
   })
 
@@ -167,7 +167,7 @@ describe('allocateStudyPlan', () => {
       entry(2, 15 * 60, 16 * 60),
     ]
     const freeSlots = computeFreeSlots(entries, settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: [], exams: [], weekStart: mondayA })
 
     const usesShortMondayGap = sessions.some((s) => s.day_of_week === 1 && s.start_minute >= 600 && s.end_minute <= 660)
     const usesLongTuesdayGap = sessions.some((s) => s.day_of_week === 2 && s.start_minute >= 600 && s.end_minute <= 900)
@@ -182,7 +182,7 @@ describe('allocateStudyPlan', () => {
       { id: 'only', user_id: 'u1', name: 'Only', color: '#000', difficulty: 3, weekly_target_minutes: 50, created_at: '' },
     ]
     const freeSlots = computeFreeSlots([], narrow, mondayA) // whole day free, 8am-8pm
-    const sessions = allocateStudyPlan({ freeSlots, subjects: oneSubject, settings: narrow, timetable: [] })
+    const sessions = allocateStudyPlan({ freeSlots, subjects: oneSubject, settings: narrow, timetable: [], exams: [], weekStart: mondayA })
 
     expect(sessions.length).toBeGreaterThan(0)
     for (const s of sessions) {
@@ -199,10 +199,44 @@ describe('allocateStudyPlan', () => {
       entry(1, 10 * 60, 11 * 60, { subject_id: 'hard' }),
     ]
     const freeSlots = computeFreeSlots(entries, settings, mondayA)
-    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: entries })
+    const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: entries, exams: [], weekStart: mondayA })
 
     const prep = sessions.find((s) => s.subject_id === 'hard' && s.day_of_week === 1 && s.end_minute === 600)
     expect(prep).toBeTruthy()
     expect(prep!.start_minute).toBeGreaterThanOrEqual(540)
+  })
+
+  it('gives a subject with an exam this week more time than an equal-difficulty subject without one', () => {
+    const equalSubjects: Subject[] = [
+      { id: 'soon', user_id: 'u1', name: 'Soon', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
+      { id: 'later', user_id: 'u1', name: 'Later', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
+    ]
+    const exams: Exam[] = [
+      { id: 'e1', user_id: 'u1', subject_id: 'soon', exam_date: '2026-01-08', start_minute: 540, end_minute: 600, notes: null, created_at: '' },
+    ]
+    const freeSlots = computeFreeSlots([], settings, mondayA)
+    const sessions = allocateStudyPlan({ freeSlots, subjects: equalSubjects, settings, timetable: [], exams, weekStart: mondayA })
+
+    const totalFor = (id: string) =>
+      sessions.filter((s) => s.subject_id === id).reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
+
+    expect(totalFor('soon')).toBeGreaterThan(totalFor('later'))
+  })
+
+  it('does not boost a subject whose exam is more than 3 weeks out', () => {
+    const equalSubjects: Subject[] = [
+      { id: 'far', user_id: 'u1', name: 'Far', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
+      { id: 'none', user_id: 'u1', name: 'None', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
+    ]
+    const exams: Exam[] = [
+      { id: 'e1', user_id: 'u1', subject_id: 'far', exam_date: '2026-03-01', start_minute: 540, end_minute: 600, notes: null, created_at: '' },
+    ]
+    const freeSlots = computeFreeSlots([], settings, mondayA)
+    const sessions = allocateStudyPlan({ freeSlots, subjects: equalSubjects, settings, timetable: [], exams, weekStart: mondayA })
+
+    const totalFor = (id: string) =>
+      sessions.filter((s) => s.subject_id === id).reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
+
+    expect(totalFor('far')).toBe(totalFor('none'))
   })
 })

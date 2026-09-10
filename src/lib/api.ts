@@ -8,6 +8,7 @@ import type {
   DayOfWeek,
   SessionStatus,
   Recurrence,
+  Exam,
 } from '../types'
 
 async function unwrap<T>(promise: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
@@ -159,6 +160,32 @@ export const sessionsApi = {
     unwrap<StudySession[]>(supabase.from('study_sessions').update({ status }).eq('id', id).select()).then((rows) => rows[0]),
 
   remove: (id: string) => unwrap(supabase.from('study_sessions').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Exams
+// ---------------------------------------------------------------------------
+export const examsApi = {
+  list: (userId: string) =>
+    unwrap<Exam[]>(supabase.from('exams').select('*').eq('user_id', userId).order('exam_date')),
+
+  create: (
+    userId: string,
+    input: { subject_id: string; exam_date: string; start_minute: number; end_minute: number; notes?: string | null }
+  ) =>
+    unwrap<Exam[]>(
+      supabase
+        .from('exams')
+        .insert({ user_id: userId, ...input })
+        .select()
+    ).then((rows) => rows[0]),
+
+  update: (
+    id: string,
+    patch: Partial<Pick<Exam, 'subject_id' | 'exam_date' | 'start_minute' | 'end_minute' | 'notes'>>
+  ) => unwrap<Exam[]>(supabase.from('exams').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  remove: (id: string) => unwrap(supabase.from('exams').delete().eq('id', id).select()),
 }
 
 // ---------------------------------------------------------------------------

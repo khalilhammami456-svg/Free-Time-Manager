@@ -72,6 +72,17 @@ export interface FreeSlot {
   end_minute: number
 }
 
+export interface Exam {
+  id: string
+  user_id: string
+  subject_id: string
+  exam_date: string // ISO date, 'yyyy-MM-dd'
+  start_minute: number
+  end_minute: number
+  notes: string | null
+  created_at: string
+}
+
 export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {

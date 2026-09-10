@@ -22,11 +22,16 @@ interface WeekGridProps {
   hourStep?: number
 }
 
-export default function WeekGrid({ dayStartMinute, dayEndMinute, blocks, renderBlock, hourStep = 2 }: WeekGridProps) {
+export default function WeekGrid({ dayStartMinute, dayEndMinute, blocks, renderBlock, hourStep = 1 }: WeekGridProps) {
   const totalMinutes = dayEndMinute - dayStartMinute
   const hourMarks: number[] = []
   for (let m = Math.ceil(dayStartMinute / 60) * 60; m <= dayEndMinute; m += 60 * hourStep) {
     hourMarks.push(m)
+  }
+  // Unlabeled minor lines at :30 so each grid square reads as 30 minutes, not 60.
+  const halfHourMarks: number[] = []
+  for (let m = Math.ceil(dayStartMinute / 30) * 30; m <= dayEndMinute; m += 30) {
+    if (m % 60 !== 0) halfHourMarks.push(m)
   }
 
   return (
@@ -53,6 +58,9 @@ export default function WeekGrid({ dayStartMinute, dayEndMinute, blocks, renderB
 
         {Array.from({ length: 7 }, (_, day) => (
           <div key={day} className="relative border-l border-slate-800" style={{ height: totalMinutes }}>
+            {halfHourMarks.map((m) => (
+              <div key={m} className="absolute inset-x-0 border-t border-dotted border-slate-800/40" style={{ top: m - dayStartMinute }} />
+            ))}
             {hourMarks.map((m) => (
               <div key={m} className="absolute inset-x-0 border-t border-slate-800/60" style={{ top: m - dayStartMinute }} />
             ))}

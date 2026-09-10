@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Planner', icon: '📅' },
   { to: '/timetable', label: 'Timetable', icon: '🗓️' },
   { to: '/subjects', label: 'Subjects', icon: '📚' },
+  { to: '/exams', label: 'Exams', icon: '📝' },
   { to: '/stats', label: 'Progress', icon: '📊' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]

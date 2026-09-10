@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { addWeeks, format, startOfWeek } from 'date-fns'
-import { useSettings, useSubjects, useTimetable, useWeekSessions } from '../lib/hooks'
+import { addWeeks, differenceInCalendarDays, format, parseISO, startOfWeek } from 'date-fns'
+import { useExams, useSettings, useSubjects, useTimetable, useWeekSessions } from '../lib/hooks'
 import { useAuth } from '../lib/AuthContext'
 import { generatePlan, isEntryActiveForWeek } from '../lib/planner'
 import { sessionsApi } from '../lib/api'
@@ -17,8 +17,18 @@ export default function PlannerPage() {
   const { subjects } = useSubjects()
   const { entries } = useTimetable()
   const { settings } = useSettings()
+  const { exams } = useExams()
   const { sessions, setSessions } = useWeekSessions(weekStart)
   const [generating, setGenerating] = useState(false)
+
+  const upcomingExams = useMemo(
+    () =>
+      exams
+        .map((e) => ({ ...e, daysAway: differenceInCalendarDays(parseISO(e.exam_date), new Date()) }))
+        .filter((e) => e.daysAway >= 0 && e.daysAway <= 21)
+        .sort((a, b) => a.daysAway - b.daysAway),
+    [exams]
+  )
 
   // Only the timetable entries that actually apply this week — a "par quinzaine"
   // (every-other-week) class only shows/blocks time on weeks matching its parity.
@@ -31,7 +41,7 @@ export default function PlannerPage() {
     if (!settings || !user) return
     setGenerating(true)
     try {
-      const { sessions: planned } = generatePlan(entries, subjects, settings, weekStartDate)
+      const { sessions: planned } = generatePlan(entries, subjects, settings, weekStartDate, exams)
       const saved = await sessionsApi.replaceAutoForWeek(user.id, weekStart, planned)
       setSessions((prev) => [...prev.filter((s) => s.source === 'manual'), ...saved])
     } finally {
@@ -136,6 +146,23 @@ export default function PlannerPage() {
               {s.name} · {durationLabel(0, totalsBySubject.get(s.id) ?? 0)}
             </div>
           ))}
+        </div>
+      )}
+
+      {upcomingExams.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {upcomingExams.map((e) => {
+            const subject = subjects.find((s) => s.id === e.subject_id)
+            return (
+              <div
+                key={e.id}
+                className="flex items-center gap-1.5 rounded-full border border-amber-600/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-300"
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: subject?.color ?? '#f59e0b' }} />
+                {subject?.name ?? 'Exam'} exam {e.daysAway === 0 ? 'today' : e.daysAway === 1 ? 'tomorrow' : `in ${e.daysAway}d`}
+              </div>
+            )
+          })}
         </div>
       )}
 

@@ -8,6 +8,7 @@ import { useReminders } from './lib/useReminders'
 const PlannerPage = lazy(() => import('./pages/PlannerPage'))
 const TimetablePage = lazy(() => import('./pages/TimetablePage'))
 const SubjectsPage = lazy(() => import('./pages/SubjectsPage'))
+const ExamsPage = lazy(() => import('./pages/ExamsPage'))
 const StatsPage = lazy(() => import('./pages/StatsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
@@ -48,6 +49,14 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <SubjectsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/exams"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ExamsPage />
               </Suspense>
             }
           />

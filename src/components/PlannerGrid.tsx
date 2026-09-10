@@ -110,8 +110,13 @@ export default function PlannerGrid({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   const hourMarks: number[] = []
-  for (let m = Math.ceil(dayStartMinute / 60) * 60; m <= dayEndMinute; m += 60 * 2) {
+  for (let m = Math.ceil(dayStartMinute / 60) * 60; m <= dayEndMinute; m += 60) {
     hourMarks.push(m)
+  }
+  // Unlabeled minor lines at :30 so each grid square reads as 30 minutes, not 60.
+  const halfHourMarks: number[] = []
+  for (let m = Math.ceil(dayStartMinute / 30) * 30; m <= dayEndMinute; m += 30) {
+    if (m % 60 !== 0) halfHourMarks.push(m)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -157,6 +162,9 @@ export default function PlannerGrid({
 
           {Array.from({ length: 7 }, (_, day) => (
             <DayColumn key={day} day={day as DayOfWeek} height={totalMinutes}>
+              {halfHourMarks.map((m) => (
+                <div key={m} className="absolute inset-x-0 border-t border-dotted border-slate-800/40" style={{ top: m - dayStartMinute }} />
+              ))}
               {hourMarks.map((m) => (
                 <div key={m} className="absolute inset-x-0 border-t border-slate-800/60" style={{ top: m - dayStartMinute }} />
               ))}
