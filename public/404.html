@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Free Time Manager</title>
+    <script>
+      // GitHub Pages has no server-side routing, so a deep link (e.g. /timetable) served
+      // as a 404 gets redirected here, which re-encodes the path as a query string and
+      // sends the browser back to index.html — where the inline script in index.html
+      // decodes it and restores the real URL via history.replaceState before React mounts.
+      var segmentCount = 1 // "/Free-Time-Manager/<rest>" — keep 1 path segment (the repo name) as the base
+      var l = window.location
+      var path = l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/'
+      var rest = l.pathname.slice(path.length)
+      l.replace(
+        path +
+          '?redirect=' +
+          encodeURIComponent(rest.replace(/&/g, '~and~')) +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+      )
+    </script>
+  </head>
+  <body></body>
+</html>

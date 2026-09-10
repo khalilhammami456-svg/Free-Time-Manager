@@ -2,12 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#4f46e5" />
     <meta name="description" content="Turn your class timetable into a smart weekly study plan for your free time." />
     <title>Free Time Manager</title>
+    <script>
+      // Restores the real URL when we arrive here via the 404.html GitHub Pages SPA redirect.
+      ;(function () {
+        var params = new URLSearchParams(window.location.search)
+        var redirect = params.get('redirect')
+        if (redirect === null) return
+        params.delete('redirect')
+        var rest = Array.from(params.entries())
+          .map(([k, v]) => k + '=' + v)
+          .join('&')
+          .replace(/~and~/g, '&')
+        var newUrl =
+          window.location.pathname +
+          redirect.replace(/~and~/g, '&') +
+          (rest ? '?' + rest : '') +
+          window.location.hash
+        window.history.replaceState(null, '', newUrl)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
