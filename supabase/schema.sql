@@ -66,6 +66,7 @@ create table if not exists public.timetable_entries (
   day_of_week smallint not null check (day_of_week between 0 and 6),
   start_minute integer not null check (start_minute >= 0 and start_minute < 1440),
   end_minute integer not null check (end_minute > 0 and end_minute <= 1440),
+  recurrence text not null default 'weekly' check (recurrence in ('weekly', 'odd_weeks', 'even_weeks')),
   source text not null default 'manual' check (source in ('manual', 'ocr')),
   created_at timestamptz not null default now(),
   constraint valid_range check (end_minute > start_minute)

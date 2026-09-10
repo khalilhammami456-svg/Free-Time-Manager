@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { addWeeks, format, startOfWeek } from 'date-fns'
 import { useSettings, useSubjects, useTimetable, useWeekSessions } from '../lib/hooks'
 import { useAuth } from '../lib/AuthContext'
-import { generatePlan } from '../lib/planner'
+import { generatePlan, isEntryActiveForWeek } from '../lib/planner'
 import { sessionsApi } from '../lib/api'
 import PlannerGrid from '../components/PlannerGrid'
 import { durationLabel } from '../lib/format'
@@ -20,11 +20,18 @@ export default function PlannerPage() {
   const { sessions, setSessions } = useWeekSessions(weekStart)
   const [generating, setGenerating] = useState(false)
 
+  // Only the timetable entries that actually apply this week — a "par quinzaine"
+  // (every-other-week) class only shows/blocks time on weeks matching its parity.
+  const entriesThisWeek = useMemo(
+    () => entries.filter((e) => isEntryActiveForWeek(e, weekStartDate)),
+    [entries, weekStartDate]
+  )
+
   const handleGenerate = async () => {
     if (!settings || !user) return
     setGenerating(true)
     try {
-      const { sessions: planned } = generatePlan(entries, subjects, settings)
+      const { sessions: planned } = generatePlan(entries, subjects, settings, weekStartDate)
       const saved = await sessionsApi.replaceAutoForWeek(user.id, weekStart, planned)
       setSessions((prev) => [...prev.filter((s) => s.source === 'manual'), ...saved])
     } finally {
@@ -136,7 +143,7 @@ export default function PlannerPage() {
         <PlannerGrid
           dayStartMinute={settings.day_start_minute}
           dayEndMinute={settings.day_end_minute}
-          timetable={entries}
+          timetable={entriesThisWeek}
           sessions={sessions}
           subjects={subjects}
           onSessionMove={handleMove}

@@ -11,9 +11,15 @@ devices via Supabase.
 
 ## Features
 
-- **Timetable import** — scan a photo or PDF of a printed timetable (OCR via
-  Tesseract.js, running entirely in your browser) or add classes manually on
-  a weekly grid.
+- **Timetable import** — for a native (non-scanned) PDF, reads the PDF's own
+  text layer and layout to reconstruct the day/time grid directly (far more
+  accurate than OCR); falls back to on-device OCR (Tesseract.js) for photos
+  or scanned PDFs. Either way you get an editable review table before
+  anything is saved.
+- **"Par quinzaine" / biweekly classes** — when two classes are detected in
+  the exact same slot for the same student group (the classic sign of a
+  class that only meets every other week), the app flags the pair and asks
+  which week each one falls on. You can also set this manually on any entry.
 - **Subjects with difficulty ratings** — rate each subject 1–5; harder
   subjects get proportionally more study time. You can also pin a subject to
   a fixed weekly minute target instead.
@@ -48,6 +54,9 @@ devices via Supabase.
 2. In the SQL editor, run the contents of [`supabase/schema.sql`](supabase/schema.sql).
    This creates all tables, row-level security policies, and a trigger that
    sets up default settings for every new user.
+   - **Already have a project running this app?** Don't re-run `schema.sql` —
+     instead run [`supabase/migrations/001_add_recurrence.sql`](supabase/migrations/001_add_recurrence.sql)
+     once to add "par quinzaine" (biweekly) support to your existing tables.
 3. In **Project Settings → API**, copy your **Project URL** and **anon public
    key**.
 4. In **Authentication → Providers**, email sign-up is enabled by default —
@@ -110,6 +119,11 @@ Covers the core free-time/allocation algorithm in `src/lib/planner.ts`.
    front-loaded, and a break is inserted between sessions.
 3. **Daily cap** — no single day gets more than your "Daily study goal"
    setting's worth of study time, so free time actually stays free.
+4. **Biweekly filtering** — before any of the above, entries marked "every
+   other week" are dropped unless the week being planned matches their
+   parity (`getWeekParity`, anchored to the ISO week number). So a
+   `par quinzaine` class only blocks time — and only shows on the
+   timetable/planner grids — on the weeks it actually happens.
 
 Both steps are pure functions with unit tests in `src/lib/planner.test.ts`.
 

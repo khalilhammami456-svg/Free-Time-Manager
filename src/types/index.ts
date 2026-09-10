@@ -12,6 +12,10 @@ export interface Subject {
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6 // 0 = Sunday
 
+// A class that meets "par quinzaine" (every two weeks) only happens on weeks of one parity.
+// The parity is anchored to the ISO week number, not any particular semester start date.
+export type Recurrence = 'weekly' | 'odd_weeks' | 'even_weeks'
+
 export interface TimetableEntry {
   id: string
   user_id: string
@@ -20,6 +24,7 @@ export interface TimetableEntry {
   day_of_week: DayOfWeek
   start_minute: number // minutes from midnight
   end_minute: number
+  recurrence: Recurrence
   source: 'manual' | 'ocr'
   created_at: string
 }

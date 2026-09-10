@@ -1,4 +1,5 @@
-import type { DayOfWeek, FreeSlot, Subject, TimetableEntry, UserSettings } from '../types'
+import { getISOWeek } from 'date-fns'
+import type { DayOfWeek, FreeSlot, Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
 
 export interface PlannedSession {
   subject_id: string
@@ -8,15 +9,30 @@ export interface PlannedSession {
 }
 
 /**
+ * A class that meets "every two weeks" only falls on weeks of one parity.
+ * Anchored to the ISO week number so it's a stable, deterministic mapping
+ * independent of any particular semester's start date.
+ */
+export function getWeekParity(weekStart: Date): Extract<Recurrence, 'odd_weeks' | 'even_weeks'> {
+  return getISOWeek(weekStart) % 2 === 1 ? 'odd_weeks' : 'even_weeks'
+}
+
+export function isEntryActiveForWeek(entry: Pick<TimetableEntry, 'recurrence'>, weekStart: Date): boolean {
+  return entry.recurrence === 'weekly' || entry.recurrence === getWeekParity(weekStart)
+}
+
+/**
  * Computes the free time slots for each day of the week by subtracting the
  * user's recurring timetable (classes/work/etc.) from their configured
- * available hours window.
+ * available hours window. `weekStart` (the Monday of the week being planned)
+ * determines which "par quinzaine" (biweekly) entries apply this week.
  */
-export function computeFreeSlots(entries: TimetableEntry[], settings: UserSettings): FreeSlot[] {
+export function computeFreeSlots(entries: TimetableEntry[], settings: UserSettings, weekStart: Date): FreeSlot[] {
   const slots: FreeSlot[] = []
+  const activeEntries = entries.filter((e) => isEntryActiveForWeek(e, weekStart))
 
   for (let day = 0 as DayOfWeek; day <= 6; day++) {
-    const busy = entries
+    const busy = activeEntries
       .filter((e) => e.day_of_week === day)
       .map((e) => [e.start_minute, e.end_minute] as const)
       .sort((a, b) => a[0] - b[0])
@@ -139,9 +155,10 @@ export function allocateStudyPlan({ freeSlots, subjects, settings }: AllocationI
 export function generatePlan(
   entries: TimetableEntry[],
   subjects: Subject[],
-  settings: UserSettings
+  settings: UserSettings,
+  weekStart: Date
 ): { freeSlots: FreeSlot[]; sessions: PlannedSession[] } {
-  const freeSlots = computeFreeSlots(entries, settings)
+  const freeSlots = computeFreeSlots(entries, settings, weekStart)
   const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
   return { freeSlots, sessions }
 }

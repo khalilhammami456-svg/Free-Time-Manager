@@ -7,6 +7,7 @@ import type {
   Difficulty,
   DayOfWeek,
   SessionStatus,
+  Recurrence,
 } from '../types'
 
 async function unwrap<T>(promise: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
@@ -55,13 +56,14 @@ export const timetableApi = {
       day_of_week: DayOfWeek
       start_minute: number
       end_minute: number
+      recurrence?: Recurrence
       source?: 'manual' | 'ocr'
     }
   ) =>
     unwrap<TimetableEntry[]>(
       supabase
         .from('timetable_entries')
-        .insert({ user_id: userId, source: 'manual', ...input })
+        .insert({ user_id: userId, source: 'manual', recurrence: 'weekly', ...input })
         .select()
     ).then((rows) => rows[0]),
 
@@ -73,19 +75,20 @@ export const timetableApi = {
       day_of_week: DayOfWeek
       start_minute: number
       end_minute: number
+      recurrence?: Recurrence
       source?: 'manual' | 'ocr'
     }>
   ) =>
     unwrap<TimetableEntry[]>(
       supabase
         .from('timetable_entries')
-        .insert(entries.map((e) => ({ user_id: userId, source: 'manual', ...e })))
+        .insert(entries.map((e) => ({ user_id: userId, source: 'manual', recurrence: 'weekly', ...e })))
         .select()
     ),
 
   update: (
     id: string,
-    patch: Partial<Pick<TimetableEntry, 'title' | 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute'>>
+    patch: Partial<Pick<TimetableEntry, 'title' | 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute' | 'recurrence'>>
   ) => unwrap<TimetableEntry[]>(supabase.from('timetable_entries').update(patch).eq('id', id).select()).then((rows) => rows[0]),
 
   remove: (id: string) => unwrap(supabase.from('timetable_entries').delete().eq('id', id).select()),

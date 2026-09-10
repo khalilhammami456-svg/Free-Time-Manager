@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { allocateStudyPlan, computeFreeSlots } from './planner'
-import type { Subject, TimetableEntry, UserSettings } from '../types'
+import { allocateStudyPlan, computeFreeSlots, getWeekParity } from './planner'
+import type { Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
 
 const settings: UserSettings = {
   user_id: 'u1',
@@ -14,15 +14,21 @@ const settings: UserSettings = {
   reminder_lead_minutes: 10,
 }
 
-function entry(day: number, start: number, end: number): TimetableEntry {
+// Consecutive Mondays always have opposite ISO-week parity — used to test biweekly filtering
+// without hardcoding which absolute week number is "odd" vs "even".
+const mondayA = new Date('2026-01-05T00:00:00Z')
+const mondayB = new Date('2026-01-12T00:00:00Z')
+
+function entry(day: number, start: number, end: number, recurrence: Recurrence = 'weekly'): TimetableEntry {
   return {
-    id: `${day}-${start}`,
+    id: `${day}-${start}-${recurrence}`,
     user_id: 'u1',
     subject_id: null,
     title: 'class',
     day_of_week: day as TimetableEntry['day_of_week'],
     start_minute: start,
     end_minute: end,
+    recurrence,
     source: 'manual',
     created_at: '',
   }
@@ -30,14 +36,14 @@ function entry(day: number, start: number, end: number): TimetableEntry {
 
 describe('computeFreeSlots', () => {
   it('returns the full day window when there is no timetable', () => {
-    const slots = computeFreeSlots([], settings)
+    const slots = computeFreeSlots([], settings, mondayA)
     expect(slots).toHaveLength(7)
     expect(slots[0]).toEqual({ day_of_week: 0, start_minute: 480, end_minute: 1200 })
   })
 
   it('subtracts busy blocks and merges overlaps', () => {
     const entries = [entry(1, 9 * 60, 11 * 60), entry(1, 10 * 60 + 30, 12 * 60)]
-    const slots = computeFreeSlots(entries, settings).filter((s) => s.day_of_week === 1)
+    const slots = computeFreeSlots(entries, settings, mondayA).filter((s) => s.day_of_week === 1)
     expect(slots).toEqual([
       { day_of_week: 1, start_minute: 480, end_minute: 540 }, // 8-9
       { day_of_week: 1, start_minute: 720, end_minute: 1200 }, // 12-20
@@ -46,8 +52,32 @@ describe('computeFreeSlots', () => {
 
   it('drops slots shorter than the minimum session length', () => {
     const entries = [entry(2, 480, 500), entry(2, 510, 1200)] // leaves only a 10-min gap
-    const slots = computeFreeSlots(entries, settings).filter((s) => s.day_of_week === 2)
+    const slots = computeFreeSlots(entries, settings, mondayA).filter((s) => s.day_of_week === 2)
     expect(slots).toHaveLength(0)
+  })
+
+  it('only blocks time for a "par quinzaine" class on weeks matching its parity', () => {
+    expect(getWeekParity(mondayA)).not.toBe(getWeekParity(mondayB))
+
+    const biweekly = entry(1, 9 * 60, 11 * 60, getWeekParity(mondayA))
+    const slotsOnA = computeFreeSlots([biweekly], settings, mondayA).filter((s) => s.day_of_week === 1)
+    const slotsOnB = computeFreeSlots([biweekly], settings, mondayB).filter((s) => s.day_of_week === 1)
+
+    // Week A: the class is on, so 9-11 is busy (split into two free slots).
+    expect(slotsOnA).toEqual([
+      { day_of_week: 1, start_minute: 480, end_minute: 540 },
+      { day_of_week: 1, start_minute: 660, end_minute: 1200 },
+    ])
+    // Week B (off week): the class doesn't happen, so the whole day is free.
+    expect(slotsOnB).toEqual([{ day_of_week: 1, start_minute: 480, end_minute: 1200 }])
+  })
+
+  it('a "weekly" class blocks time on every week regardless of parity', () => {
+    const weekly = entry(1, 9 * 60, 11 * 60, 'weekly')
+    const slotsOnA = computeFreeSlots([weekly], settings, mondayA).filter((s) => s.day_of_week === 1)
+    const slotsOnB = computeFreeSlots([weekly], settings, mondayB).filter((s) => s.day_of_week === 1)
+    expect(slotsOnA).toEqual(slotsOnB)
+    expect(slotsOnA).toHaveLength(2)
   })
 })
 
@@ -58,7 +88,7 @@ describe('allocateStudyPlan', () => {
   ]
 
   it('gives the harder subject more total minutes than the easier one', () => {
-    const freeSlots = computeFreeSlots([], settings)
+    const freeSlots = computeFreeSlots([], settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
 
     const totalFor = (id: string) =>
@@ -68,7 +98,7 @@ describe('allocateStudyPlan', () => {
   })
 
   it('never schedules overlapping sessions within the same slot', () => {
-    const freeSlots = computeFreeSlots([], settings)
+    const freeSlots = computeFreeSlots([], settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
 
     const byDay = new Map<number, typeof sessions>()
@@ -87,14 +117,14 @@ describe('allocateStudyPlan', () => {
     const capped: Subject[] = [
       { id: 'fixed', user_id: 'u1', name: 'Fixed', color: '#000', difficulty: 3, weekly_target_minutes: 50, created_at: '' },
     ]
-    const freeSlots = computeFreeSlots([], settings)
+    const freeSlots = computeFreeSlots([], settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects: capped, settings })
     const total = sessions.reduce((sum, s) => sum + (s.end_minute - s.start_minute), 0)
     expect(total).toBeLessThanOrEqual(50)
   })
 
   it('never schedules more than the daily study target on any single day, leaving real free time', () => {
-    const freeSlots = computeFreeSlots([], settings) // 12h/day free, but cap is 120min/day
+    const freeSlots = computeFreeSlots([], settings, mondayA) // 12h/day free, but cap is 120min/day
     const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
 
     const byDay = new Map<number, number>()
@@ -110,7 +140,7 @@ describe('allocateStudyPlan', () => {
 
   it('returns nothing when there are no free slots', () => {
     const entries = Array.from({ length: 7 }, (_, d) => entry(d, settings.day_start_minute, settings.day_end_minute))
-    const freeSlots = computeFreeSlots(entries, settings)
+    const freeSlots = computeFreeSlots(entries, settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects, settings })
     expect(sessions).toEqual([])
   })

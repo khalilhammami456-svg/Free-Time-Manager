@@ -166,10 +166,14 @@ export default function PlannerGrid({
                 .map((e) => (
                   <div
                     key={e.id}
+                    title={e.recurrence !== 'weekly' ? 'Every other week — not on this schedule next week' : undefined}
                     className="absolute inset-x-0.5 overflow-hidden rounded-md bg-slate-700/70 px-1.5 py-1 text-[10px] text-slate-300"
                     style={{ top: e.start_minute - dayStartMinute, height: Math.max(e.end_minute - e.start_minute, 16) }}
                   >
-                    <span className="truncate">{e.title}</span>
+                    <span className="truncate">
+                      {e.recurrence !== 'weekly' && <span className="mr-1 text-amber-400">⟳</span>}
+                      {e.title}
+                    </span>
                   </div>
                 ))}
 
