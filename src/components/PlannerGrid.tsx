@@ -72,7 +72,10 @@ function SessionBlock({
       }}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="truncate font-medium">{subject?.name ?? 'Study'}</span>
+        <span className="truncate font-medium">
+          {session.is_review && <span title="Review before class">📖 </span>}
+          {subject?.name ?? 'Study'}
+        </span>
         <span className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
           <button
             type="button"

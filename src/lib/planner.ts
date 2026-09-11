@@ -6,6 +6,7 @@ export interface PlannedSession {
   day_of_week: DayOfWeek
   start_minute: number
   end_minute: number
+  is_review: boolean
 }
 
 /**
@@ -203,7 +204,13 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
     if (chunk < settings.min_session_minutes || chunk <= 0) continue
 
     const start = candidate.end_minute - chunk
-    sessions.push({ subject_id: occ.subject_id, day_of_week: candidate.day_of_week, start_minute: start, end_minute: candidate.end_minute })
+    sessions.push({
+      subject_id: occ.subject_id,
+      day_of_week: candidate.day_of_week,
+      start_minute: start,
+      end_minute: candidate.end_minute,
+      is_review: true,
+    })
     remaining.set(occ.subject_id, desired - chunk)
     dayUsedMinutes.set(candidate.day_of_week, dayUsed + chunk)
     candidate.end_minute = start
@@ -249,6 +256,7 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
         day_of_week: slot.day_of_week,
         start_minute: cursor,
         end_minute: cursor + chunk,
+        is_review: false,
       })
 
       remaining.set(pick.id, desired - chunk)

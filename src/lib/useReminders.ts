@@ -28,7 +28,12 @@ export function useReminders() {
         const leadStart = session.start_minute - settings.reminder_lead_minutes
         if (nowMinute >= leadStart && nowMinute < session.start_minute && !notifiedRef.current.has(session.id)) {
           const subject = subjects.find((s) => s.id === session.subject_id)
-          notify('Study session starting soon', `${subject?.name ?? 'Study time'} in ${session.start_minute - nowMinute} min`)
+          const minutesAway = session.start_minute - nowMinute
+          if (session.is_review) {
+            notify('Review time is near', `Quick ${subject?.name ?? 'subject'} review before class — starts in ${minutesAway} min`)
+          } else {
+            notify('Study session starting soon', `${subject?.name ?? 'Study time'} in ${minutesAway} min`)
+          }
           notifiedRef.current.add(session.id)
         }
       }

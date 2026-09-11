@@ -123,7 +123,7 @@ export const sessionsApi = {
   replaceAutoForWeek: async (
     userId: string,
     weekStart: string,
-    sessions: Array<Pick<StudySession, 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute'>>
+    sessions: Array<Pick<StudySession, 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute' | 'is_review'>>
   ) => {
     const { error: deleteError } = await supabase
       .from('study_sessions')
@@ -169,6 +169,19 @@ export const sessionsApi = {
     unwrap<StudySession[]>(
       supabase.from('study_sessions').update({ status: 'skipped' as const, skip_reason: reason }).eq('id', id).select()
     ).then((rows) => rows[0]),
+
+  /** How many times the user has aborted a session with this exact reason since `sinceIso` — used to tell a first-time slip from a pattern. */
+  countRecentAbortsByReason: async (userId: string, reason: string, sinceIso: string): Promise<number> => {
+    const { count, error } = await supabase
+      .from('study_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'skipped')
+      .eq('skip_reason', reason)
+      .gte('created_at', sinceIso)
+    if (error) throw new Error(error.message)
+    return count ?? 0
+  },
 
   remove: (id: string) => unwrap(supabase.from('study_sessions').delete().eq('id', id).select()),
 }

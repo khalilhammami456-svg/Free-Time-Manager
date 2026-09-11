@@ -53,7 +53,13 @@ devices via Supabase.
   reason) so you can see patterns later.
 - **Progress dashboard** — minutes studied per subject, weekly trend, plan
   adherence, and a day streak.
-- **Reminders** — browser notifications shortly before a session starts.
+- **Reminders** — browser notifications shortly before a session starts, called out
+  distinctly ("Review time is near") for the strategic pre-class review sessions so
+  they don't blend in with regular study time.
+- **Honest feedback on stopping early** — if you abort a focus session, after you
+  give a reason the app reacts to it directly, and gets firmer if the same reason
+  keeps repeating within two weeks (e.g. "got distracted" three times running gets
+  called out as a pattern, not treated as a one-off).
 - **Installable PWA** — add to your home screen / dock on desktop or mobile;
   works offline for the app shell.
 - **Account sync** — sign in with email, and your data follows you across

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { sessionsApi } from '../lib/api'
+import { useAuth } from '../lib/AuthContext'
 import type { StudySession, Subject } from '../types'
 
 const ABORT_REASONS = ['Too tired', 'Got distracted', 'Ran out of time', 'Changed my mind', 'Other'] as const
@@ -11,9 +12,35 @@ function formatClock(totalSeconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+/** A blunt-but-fair reaction to why the user stopped — firmer once it's a repeat pattern in the last two weeks, not a one-off. */
+function verdictFor(reason: string, timesInTwoWeeks: number): string {
+  const repeat = timesInTwoWeeks >= 2
+  switch (reason) {
+    case 'Too tired':
+      return repeat
+        ? `That's ${timesInTwoWeeks} sessions you've stopped from being tired in the last two weeks — this isn't bad luck, it's a scheduling mismatch. Go narrow your "productive hours" in Settings to when you're actually alert.`
+        : "Fair enough, everyone has an off day. If it keeps happening, it usually means sessions are landing outside your real energy window — worth checking Settings."
+    case 'Got distracted':
+      return repeat
+        ? `${timesInTwoWeeks} times this reason in two weeks — that's a pattern, not an accident. Phone in another room, tab closed, before you start the next one.`
+        : 'Happens to everyone once. Try putting your phone out of reach for the next session.'
+    case 'Ran out of time':
+      return repeat
+        ? `This subject has run over ${timesInTwoWeeks} times in two weeks — your sessions for it are planned too short. Raise its weekly target or difficulty so future plans give it more room.`
+        : "No shame in that — might just mean this subject needs a longer block. Consider bumping its weekly target."
+    case 'Changed my mind':
+      return repeat
+        ? `${timesInTwoWeeks} changed-mind aborts in two weeks. If this subject keeps losing out, be honest about whether it belongs in this week's plan at all, instead of aborting it each time.`
+        : "Alright — just know a skipped session doesn't reschedule itself, it just doesn't happen."
+    default:
+      return "Thanks for being straight about it — noted."
+  }
+}
+
 export default function StudyTimerPage() {
   const location = useLocation() as { state?: { session?: StudySession; subject?: Subject } }
   const navigate = useNavigate()
+  const { user } = useAuth()
   const session = location.state?.session
   const subject = location.state?.subject
 
@@ -25,6 +52,7 @@ export default function StudyTimerPage() {
   const [abortReason, setAbortReason] = useState<string>('')
   const [customReason, setCustomReason] = useState('')
   const [saving, setSaving] = useState(false)
+  const [verdict, setVerdict] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -51,12 +79,15 @@ export default function StudyTimerPage() {
   }, [session, saving, totalSeconds, remainingSeconds, navigate])
 
   const confirmAbort = async () => {
-    if (!session) return
+    if (!session || !user) return
     const reason = abortReason === 'Other' ? customReason.trim() : abortReason
     if (!reason) return
     setSaving(true)
     await sessionsApi.abort(session.id, reason)
-    navigate('/', { replace: true })
+    const sinceIso = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const timesInTwoWeeks = await sessionsApi.countRecentAbortsByReason(user.id, reason, sinceIso).catch(() => 1)
+    setSaving(false)
+    setVerdict(verdictFor(reason, timesInTwoWeeks))
   }
 
   if (!session || !subject) {
@@ -66,6 +97,25 @@ export default function StudyTimerPage() {
         <button
           onClick={() => navigate('/')}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500"
+        >
+          Back to Planner
+        </button>
+      </div>
+    )
+  }
+
+  if (verdict) {
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center px-4 py-10 text-center"
+        style={{ background: `radial-gradient(circle at 50% 35%, ${subject.color}22 0%, #020617 70%)` }}
+      >
+        <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Session stopped</p>
+        <h1 className="mb-4 text-xl font-semibold text-white">{subject.name}</h1>
+        <p className="mb-8 max-w-sm text-sm leading-relaxed text-slate-300">{verdict}</p>
+        <button
+          onClick={() => navigate('/', { replace: true })}
+          className="rounded-full bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500"
         >
           Back to Planner
         </button>
@@ -187,7 +237,7 @@ export default function StudyTimerPage() {
               disabled={!abortReason || (abortReason === 'Other' && !customReason.trim()) || saving}
               className="flex-1 rounded-lg bg-red-600/90 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-40"
             >
-              Confirm stop
+              {saving ? 'Stopping…' : 'Confirm stop'}
             </button>
             <button
               onClick={() => setShowAbortPanel(false)}

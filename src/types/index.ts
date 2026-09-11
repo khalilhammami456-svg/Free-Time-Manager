@@ -43,6 +43,7 @@ export interface StudySession {
   source: SessionSource
   week_start: string // ISO date (Monday) this session instance belongs to
   skip_reason: string | null // why a focus session was ended early / abandoned
+  is_review: boolean // true for the strategic session placed right before its linked class
   created_at: string
 }
 
