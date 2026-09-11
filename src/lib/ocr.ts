@@ -1,7 +1,17 @@
 import { createWorker } from 'tesseract.js'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
-import type { DayOfWeek } from '../types'
+import type { DayOfWeek, Subject } from '../types'
+
+/** Best-effort match so an imported row is pre-linked to a subject the user already created. */
+export function matchSubjectId(guess: string, subjects: Subject[]): string | null {
+  const lower = guess.toLowerCase()
+  const found = subjects.find((s) => {
+    const name = s.name.toLowerCase().trim()
+    return name.length > 2 && (lower.includes(name) || name.includes(lower))
+  })
+  return found?.id ?? null
+}
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -474,6 +484,74 @@ export async function extractExamScheduleFromFile(
   try {
     const { data } = await worker.recognize(imageSource)
     return { text: data.text, rows: parseExamScheduleText(data.text), method: 'ocr-image' }
+  } finally {
+    await worker.terminate()
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Assignment/syllabus deadline import — same idea as exams but date-only (no
+// time-of-day block), since a deliverable is "due by" a date, not scheduled
+// into a slot.
+// ---------------------------------------------------------------------------
+
+export interface ParsedAssignmentRow {
+  raw: string
+  due_date: string | null // ISO yyyy-MM-dd
+  title_guess: string
+}
+
+/** Turns raw text (from a PDF's text layer or OCR) into best-guess assignment rows for review. */
+export function parseAssignmentScheduleText(text: string, referenceDate: Date = new Date()): ParsedAssignmentRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  const rows: ParsedAssignmentRow[] = []
+
+  for (const line of lines) {
+    const date = parseDateFromLine(line, referenceDate)
+    if (!date) continue
+
+    let title_guess = line
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
+      .replace(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g, ' ')
+      .replace(MONTH_NAME_RE_GLOBAL, ' ')
+      .replace(/\b\d{1,2}(st|nd|rd|th)\b/gi, ' ')
+      .replace(/\bdue\b/gi, ' ')
+      .replace(/[|,;:_\-–—]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!title_guess) title_guess = 'Assignment'
+
+    rows.push({ raw: line, due_date: date, title_guess })
+  }
+
+  return rows
+}
+
+export async function extractAssignmentScheduleFromFile(
+  file: File,
+  onProgress?: (status: string, progress: number) => void
+): Promise<{ text: string; rows: ParsedAssignmentRow[]; method: ExtractionMethod }> {
+  if (file.type === 'application/pdf') {
+    onProgress?.('reading pdf text', 0.2)
+    const text = await extractPdfPlainText(file)
+    if (text) {
+      onProgress?.('done', 1)
+      return { text, rows: parseAssignmentScheduleText(text), method: 'pdf-text' }
+    }
+  }
+
+  const imageSource = await fileToImageDataUrl(file)
+  const worker = await createWorker('eng', undefined, {
+    logger: (m) => onProgress?.(m.status, m.progress),
+  })
+
+  try {
+    const { data } = await worker.recognize(imageSource)
+    return { text: data.text, rows: parseAssignmentScheduleText(data.text), method: 'ocr-image' }
   } finally {
     await worker.terminate()
   }

@@ -44,6 +44,8 @@ export interface StudySession {
   week_start: string // ISO date (Monday) this session instance belongs to
   skip_reason: string | null // why a focus session was ended early / abandoned
   is_review: boolean // true for the strategic session placed right before its linked class
+  placement_reason: string | null // human-readable explanation of why the planner put it here
+  catch_up_dismissed: boolean // whether a "catch up" suggestion for this (skipped) session was acted on/dismissed
   created_at: string
 }
 
@@ -82,7 +84,34 @@ export interface Exam {
   start_minute: number
   end_minute: number
   notes: string | null
+  outcome_rating: number | null // 1-5 self-rating, filled in after the exam date has passed
+  outcome_notes: string | null
   created_at: string
+}
+
+export interface Assignment {
+  id: string
+  user_id: string
+  subject_id: string
+  title: string
+  due_date: string // ISO date, 'yyyy-MM-dd'
+  notes: string | null
+  created_at: string
+}
+
+export interface Profile {
+  id: string
+  full_name: string | null
+  share_code: string
+  sharing_enabled: boolean
+  created_at: string
+}
+
+/** A classmate's busy time blocks only — never their subjects, sessions, or any other data. */
+export interface SharedBusyBlock {
+  day_of_week: DayOfWeek
+  start_minute: number
+  end_minute: number
 }
 
 export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const

@@ -9,6 +9,9 @@ import type {
   SessionStatus,
   Recurrence,
   Exam,
+  Assignment,
+  Profile,
+  SharedBusyBlock,
 } from '../types'
 
 async function unwrap<T>(promise: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
@@ -123,7 +126,9 @@ export const sessionsApi = {
   replaceAutoForWeek: async (
     userId: string,
     weekStart: string,
-    sessions: Array<Pick<StudySession, 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute' | 'is_review'>>
+    sessions: Array<
+      Pick<StudySession, 'subject_id' | 'day_of_week' | 'start_minute' | 'end_minute' | 'is_review' | 'placement_reason'>
+    >
   ) => {
     const { error: deleteError } = await supabase
       .from('study_sessions')
@@ -153,8 +158,25 @@ export const sessionsApi = {
 
   update: (
     id: string,
-    patch: Partial<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute' | 'status' | 'source' | 'skip_reason'>>
+    patch: Partial<
+      Pick<
+        StudySession,
+        'day_of_week' | 'start_minute' | 'end_minute' | 'status' | 'source' | 'skip_reason' | 'catch_up_dismissed'
+      >
+    >
   ) => unwrap<StudySession[]>(supabase.from('study_sessions').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  /** Creates a single manual session directly — used e.g. for accepting a "catch up on missed time" suggestion. */
+  create: (
+    userId: string,
+    input: { subject_id: string; day_of_week: DayOfWeek; start_minute: number; end_minute: number; week_start: string }
+  ) =>
+    unwrap<StudySession[]>(
+      supabase
+        .from('study_sessions')
+        .insert({ user_id: userId, source: 'manual' as const, status: 'planned' as const, ...input })
+        .select()
+    ).then((rows) => rows[0]),
 
   setStatus: (id: string, status: SessionStatus) =>
     unwrap<StudySession[]>(supabase.from('study_sessions').update({ status }).eq('id', id).select()).then((rows) => rows[0]),
@@ -206,10 +228,47 @@ export const examsApi = {
 
   update: (
     id: string,
-    patch: Partial<Pick<Exam, 'subject_id' | 'exam_date' | 'start_minute' | 'end_minute' | 'notes'>>
+    patch: Partial<
+      Pick<Exam, 'subject_id' | 'exam_date' | 'start_minute' | 'end_minute' | 'notes' | 'outcome_rating' | 'outcome_notes'>
+    >
   ) => unwrap<Exam[]>(supabase.from('exams').update(patch).eq('id', id).select()).then((rows) => rows[0]),
 
   remove: (id: string) => unwrap(supabase.from('exams').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Assignments
+// ---------------------------------------------------------------------------
+export const assignmentsApi = {
+  list: (userId: string) =>
+    unwrap<Assignment[]>(supabase.from('assignments').select('*').eq('user_id', userId).order('due_date')),
+
+  create: (userId: string, input: { subject_id: string; title: string; due_date: string; notes?: string | null }) =>
+    unwrap<Assignment[]>(
+      supabase
+        .from('assignments')
+        .insert({ user_id: userId, ...input })
+        .select()
+    ).then((rows) => rows[0]),
+
+  update: (id: string, patch: Partial<Pick<Assignment, 'subject_id' | 'title' | 'due_date' | 'notes'>>) =>
+    unwrap<Assignment[]>(supabase.from('assignments').update(patch).eq('id', id).select()).then((rows) => rows[0]),
+
+  remove: (id: string) => unwrap(supabase.from('assignments').delete().eq('id', id).select()),
+}
+
+// ---------------------------------------------------------------------------
+// Profile — sharing settings + cross-user free-time lookup
+// ---------------------------------------------------------------------------
+export const profilesApi = {
+  get: (userId: string) => unwrap<Profile>(supabase.from('profiles').select('*').eq('id', userId).single()),
+
+  update: (userId: string, patch: Partial<Pick<Profile, 'sharing_enabled'>>) =>
+    unwrap<Profile[]>(supabase.from('profiles').update(patch).eq('id', userId).select()).then((rows) => rows[0]),
+
+  /** Looks up only bare busy time blocks for a classmate's share code — no subjects, sessions, or other personal data. */
+  getSharedBusyBlocks: (shareCode: string) =>
+    unwrap<SharedBusyBlock[]>(supabase.rpc('get_shared_busy_blocks', { p_share_code: shareCode.trim() })),
 }
 
 // ---------------------------------------------------------------------------

@@ -212,7 +212,7 @@ describe('allocateStudyPlan', () => {
       { id: 'later', user_id: 'u1', name: 'Later', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
     ]
     const exams: Exam[] = [
-      { id: 'e1', user_id: 'u1', subject_id: 'soon', exam_date: '2026-01-08', start_minute: 540, end_minute: 600, notes: null, created_at: '' },
+      { id: 'e1', user_id: 'u1', subject_id: 'soon', exam_date: '2026-01-08', start_minute: 540, end_minute: 600, notes: null, outcome_rating: null, outcome_notes: null, created_at: '' },
     ]
     const freeSlots = computeFreeSlots([], settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects: equalSubjects, settings, timetable: [], exams, weekStart: mondayA })
@@ -229,7 +229,7 @@ describe('allocateStudyPlan', () => {
       { id: 'none', user_id: 'u1', name: 'None', color: '#000', difficulty: 3, weekly_target_minutes: null, created_at: '' },
     ]
     const exams: Exam[] = [
-      { id: 'e1', user_id: 'u1', subject_id: 'far', exam_date: '2026-03-01', start_minute: 540, end_minute: 600, notes: null, created_at: '' },
+      { id: 'e1', user_id: 'u1', subject_id: 'far', exam_date: '2026-03-01', start_minute: 540, end_minute: 600, notes: null, outcome_rating: null, outcome_notes: null, created_at: '' },
     ]
     const freeSlots = computeFreeSlots([], settings, mondayA)
     const sessions = allocateStudyPlan({ freeSlots, subjects: equalSubjects, settings, timetable: [], exams, weekStart: mondayA })

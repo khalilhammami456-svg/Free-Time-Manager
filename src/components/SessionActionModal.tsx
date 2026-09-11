@@ -34,6 +34,11 @@ export default function SessionActionModal({
     <Modal title={editing ? 'Edit study time' : subject?.name ?? 'Study session'} onClose={onClose}>
       {!editing ? (
         <div className="space-y-2">
+          {session.placement_reason && (
+            <p className="mb-1 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs italic text-slate-400">
+              {session.placement_reason}
+            </p>
+          )}
           {session.status === 'planned' && (
             <button
               onClick={onStartStudy}

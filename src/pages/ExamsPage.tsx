@@ -1,28 +1,19 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { useExams, useSubjects } from '../lib/hooks'
-import type { ParsedExamRow } from '../lib/ocr'
+import { matchSubjectId, type ParsedExamRow } from '../lib/ocr'
 import { minutesToTimeInput, timeInputToMinutes } from '../lib/format'
-import type { Subject } from '../types'
 
 function todayInputValue() {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
-/** Best-effort match so an imported exam is pre-linked to a subject the user already created. */
-function matchSubjectId(guess: string, subjects: Subject[]): string | null {
-  const lower = guess.toLowerCase()
-  const found = subjects.find((s) => {
-    const name = s.name.toLowerCase().trim()
-    return name.length > 2 && (lower.includes(name) || name.includes(lower))
-  })
-  return found?.id ?? null
-}
-
 type OcrExamRow = ParsedExamRow & { include: boolean; subject_id: string | null }
 
+const OUTCOME_STARS = [1, 2, 3, 4, 5] as const
+
 export default function ExamsPage() {
-  const { exams, loading, create, remove } = useExams()
+  const { exams, loading, create, update, remove } = useExams()
   const { subjects } = useSubjects()
 
   const [subjectId, setSubjectId] = useState('')
@@ -315,12 +306,32 @@ export default function ExamsPage() {
             return (
               <li
                 key={exam.id}
-                className={`flex flex-wrap items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 ${isPast ? 'opacity-50' : ''}`}
+                className={`flex flex-wrap items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 ${isPast && exam.outcome_rating !== null ? 'opacity-50' : ''}`}
               >
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: subject?.color ?? '#475569' }} />
                 <div className="min-w-[140px] flex-1">
                   <div className="text-sm font-medium text-white">{subject?.name ?? 'Unknown subject'}</div>
                   {exam.notes && <div className="text-xs text-slate-500">{exam.notes}</div>}
+                  {isPast && (
+                    <div className="mt-1 flex items-center gap-0.5">
+                      {OUTCOME_STARS.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => update(exam.id, { outcome_rating: n })}
+                          title={`Rate ${n}/5`}
+                          className={`text-sm leading-none ${
+                            exam.outcome_rating !== null && n <= exam.outcome_rating ? 'text-amber-400' : 'text-slate-700 hover:text-slate-500'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                      {exam.outcome_rating === null && (
+                        <span className="ml-1.5 text-[10px] text-slate-500">How did it go?</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <span className="text-xs text-slate-400">
                   {format(parseISO(exam.exam_date), 'EEE, MMM d')} · {minutesToTimeInput(exam.start_minute)}–

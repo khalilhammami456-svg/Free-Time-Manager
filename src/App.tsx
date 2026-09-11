@@ -9,9 +9,11 @@ const PlannerPage = lazy(() => import('./pages/PlannerPage'))
 const TimetablePage = lazy(() => import('./pages/TimetablePage'))
 const SubjectsPage = lazy(() => import('./pages/SubjectsPage'))
 const ExamsPage = lazy(() => import('./pages/ExamsPage'))
+const AssignmentsPage = lazy(() => import('./pages/AssignmentsPage'))
 const StatsPage = lazy(() => import('./pages/StatsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const StudyTimerPage = lazy(() => import('./pages/StudyTimerPage'))
+const ComparePage = lazy(() => import('./pages/ComparePage'))
 
 function ReminderWatcher() {
   useReminders()
@@ -58,6 +60,22 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <ExamsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/assignments"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <AssignmentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/compare"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ComparePage />
               </Suspense>
             }
           />

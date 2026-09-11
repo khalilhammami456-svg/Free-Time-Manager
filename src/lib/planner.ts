@@ -1,5 +1,6 @@
-import { differenceInCalendarDays, getISOWeek, parseISO } from 'date-fns'
-import type { DayOfWeek, Exam, FreeSlot, Recurrence, Subject, TimetableEntry, UserSettings } from '../types'
+import { addDays, differenceInCalendarDays, getISOWeek, parseISO } from 'date-fns'
+import { DIFFICULTY_LABELS } from '../types'
+import type { Assignment, DayOfWeek, Exam, FreeSlot, Recurrence, StudySession, Subject, TimetableEntry, UserSettings } from '../types'
 
 export interface PlannedSession {
   subject_id: string
@@ -7,6 +8,7 @@ export interface PlannedSession {
   start_minute: number
   end_minute: number
   is_review: boolean
+  placement_reason: string
 }
 
 /**
@@ -28,15 +30,22 @@ export function isEntryActiveForWeek(entry: Pick<TimetableEntry, 'recurrence'>, 
  * available hours window. `weekStart` (the Monday of the week being planned)
  * determines which "par quinzaine" (biweekly) entries apply this week.
  */
-export function computeFreeSlots(entries: TimetableEntry[], settings: UserSettings, weekStart: Date): FreeSlot[] {
+export function computeFreeSlots(
+  entries: TimetableEntry[],
+  settings: UserSettings,
+  weekStart: Date,
+  /** Additional busy blocks to subtract alongside the timetable — e.g. already-scheduled
+   * sessions, when computing what's still free for a catch-up session this week. */
+  extraBusy: Array<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute'>> = []
+): FreeSlot[] {
   const slots: FreeSlot[] = []
   const activeEntries = entries.filter((e) => isEntryActiveForWeek(e, weekStart))
 
   for (let day = 0 as DayOfWeek; day <= 6; day++) {
-    const busy = activeEntries
-      .filter((e) => e.day_of_week === day)
-      .map((e) => [e.start_minute, e.end_minute] as const)
-      .sort((a, b) => a[0] - b[0])
+    const busy = [
+      ...activeEntries.filter((e) => e.day_of_week === day).map((e) => [e.start_minute, e.end_minute] as const),
+      ...extraBusy.filter((e) => e.day_of_week === day).map((e) => [e.start_minute, e.end_minute] as const),
+    ].sort((a, b) => a[0] - b[0])
 
     // Merge overlapping/adjacent busy blocks.
     const merged: Array<[number, number]> = []
@@ -88,26 +97,46 @@ function splitByPreferredWindow(slot: FreeSlot, prefStart: number, prefEnd: numb
 }
 
 /**
- * How much extra weight a subject's proportional share gets based on how soon its next exam
- * falls, relative to the week being planned. Flat 3x once the exam is within this week, tapers
- * linearly down to 1x (no boost) by three weeks out, and 1x beyond that or with no exam at all.
+ * How much extra weight a subject's proportional share gets based on how soon its next
+ * deadline (exam or assignment) falls, relative to the week being planned. Flat 3x once it's
+ * within this week, tapers linearly down to 1x (no boost) by three weeks out, and 1x beyond
+ * that or with no deadline at all.
  */
-function examUrgencyMultiplier(daysUntilExam: number | null): number {
-  if (daysUntilExam === null || daysUntilExam < 0 || daysUntilExam > 21) return 1
-  if (daysUntilExam <= 6) return 3
-  return 1 + (2 * (21 - daysUntilExam)) / (21 - 6)
+function examUrgencyMultiplier(daysUntilDeadline: number | null): number {
+  if (daysUntilDeadline === null || daysUntilDeadline < 0 || daysUntilDeadline > 21) return 1
+  if (daysUntilDeadline <= 6) return 3
+  return 1 + (2 * (21 - daysUntilDeadline)) / (21 - 6)
 }
 
-/** For each subject, the smallest non-negative day-gap to one of its exams from `weekStart`. */
-function nextExamDaysBySubject(exams: Exam[], weekStart: Date): Map<string, number> {
+/** For each subject, the smallest non-negative day-gap to its nearest exam or assignment due date from `weekStart`. */
+function nextDeadlineDaysBySubject(exams: Exam[], assignments: Assignment[], weekStart: Date): Map<string, number> {
   const map = new Map<string, number>()
-  for (const exam of exams) {
-    const days = differenceInCalendarDays(parseISO(exam.exam_date), weekStart)
-    if (days < 0) continue
-    const current = map.get(exam.subject_id)
-    if (current === undefined || days < current) map.set(exam.subject_id, days)
+  const consider = (subjectId: string, dateStr: string) => {
+    const days = differenceInCalendarDays(parseISO(dateStr), weekStart)
+    if (days < 0) return
+    const current = map.get(subjectId)
+    if (current === undefined || days < current) map.set(subjectId, days)
   }
+  for (const exam of exams) consider(exam.subject_id, exam.exam_date)
+  for (const a of assignments) consider(a.subject_id, a.due_date)
   return map
+}
+
+/** A one-line, user-facing explanation of why a session landed where it did. */
+function describePlacement(
+  subject: Subject,
+  opts: { preferred: boolean; explicitTarget: boolean; urgencyDays: number | null }
+): string {
+  const why = opts.explicitTarget
+    ? `you set a fixed weekly target for ${subject.name}`
+    : opts.urgencyDays !== null && opts.urgencyDays <= 21
+      ? `${subject.name} has a deadline in ${opts.urgencyDays} day${opts.urgencyDays === 1 ? '' : 's'}`
+      : `${subject.name} is rated ${DIFFICULTY_LABELS[subject.difficulty].toLowerCase()}`
+  const window = opts.preferred
+    ? 'this falls in your stated productive hours'
+    : 'your productive hours were already full, so this spilled into the rest of the day'
+  const sentence = `${why} — ${window}.`
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1)
 }
 
 interface AllocationInput {
@@ -116,8 +145,10 @@ interface AllocationInput {
   settings: UserSettings
   /** This week's active classes — used to place a review session right before each one. */
   timetable: TimetableEntry[]
-  /** All the user's exams and the week being planned — used to ramp up study time as an exam nears. */
+  /** All the user's exams — used to ramp up study time as an exam nears. */
   exams: Exam[]
+  /** All the user's assignments — given the same deadline-urgency ramp-up as exams. */
+  assignments?: Assignment[]
   weekStart: Date
 }
 
@@ -137,11 +168,20 @@ interface AllocationInput {
  *    pulling time away from subjects without one (explicit weekly-target subjects are exempt —
  *    that number is an intentional override, not something to silently inflate).
  */
-export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, exams, weekStart }: AllocationInput): PlannedSession[] {
+export function allocateStudyPlan({
+  freeSlots,
+  subjects,
+  settings,
+  timetable,
+  exams,
+  assignments = [],
+  weekStart,
+}: AllocationInput): PlannedSession[] {
   if (subjects.length === 0 || freeSlots.length === 0) return []
 
   const sessions: PlannedSession[] = []
   const dayUsedMinutes = new Map<number, number>()
+  const subjectsById = new Map(subjects.map((s) => [s.id, s]))
   const MIN_TAIL_SESSION = 15 // allow a short session to use up a slot's final leftover minutes
 
   // ---- Subject weekly targets, sized against the time we'll actually be able to use ----
@@ -152,6 +192,7 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
 
   const explicitSubjects = subjects.filter((s) => s.weekly_target_minutes != null && s.weekly_target_minutes > 0)
   const proportionalSubjects = subjects.filter((s) => !(s.weekly_target_minutes != null && s.weekly_target_minutes > 0))
+  const explicitSubjectIds = new Set(explicitSubjects.map((s) => s.id))
 
   const remaining = new Map<string, number>()
 
@@ -163,8 +204,8 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
   explicitTotal = Math.min(explicitTotal, weeklyPool)
 
   const pool = Math.max(0, weeklyPool - explicitTotal)
-  const nextExamDays = nextExamDaysBySubject(exams, weekStart)
-  const weightOf = (s: Subject) => s.difficulty * examUrgencyMultiplier(nextExamDays.get(s.id) ?? null)
+  const nextDeadlineDays = nextDeadlineDaysBySubject(exams, assignments, weekStart)
+  const weightOf = (s: Subject) => s.difficulty * examUrgencyMultiplier(nextDeadlineDays.get(s.id) ?? null)
   const totalWeight = proportionalSubjects.reduce((sum, s) => sum + weightOf(s), 0)
   for (const s of proportionalSubjects) {
     const share = totalWeight > 0 ? (weightOf(s) / totalWeight) * pool : 0
@@ -204,12 +245,14 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
     if (chunk < settings.min_session_minutes || chunk <= 0) continue
 
     const start = candidate.end_minute - chunk
+    const occSubject = subjectsById.get(occ.subject_id)
     sessions.push({
       subject_id: occ.subject_id,
       day_of_week: candidate.day_of_week,
       start_minute: start,
       end_minute: candidate.end_minute,
       is_review: true,
+      placement_reason: `Placed right before your ${occSubject?.name ?? 'class'} so you walk in prepared.`,
     })
     remaining.set(occ.subject_id, desired - chunk)
     dayUsedMinutes.set(candidate.day_of_week, dayUsed + chunk)
@@ -257,6 +300,11 @@ export function allocateStudyPlan({ freeSlots, subjects, settings, timetable, ex
         start_minute: cursor,
         end_minute: cursor + chunk,
         is_review: false,
+        placement_reason: describePlacement(pick, {
+          preferred: slot.preferred,
+          explicitTarget: explicitSubjectIds.has(pick.id),
+          urgencyDays: nextDeadlineDays.get(pick.id) ?? null,
+        }),
       })
 
       remaining.set(pick.id, desired - chunk)
@@ -274,10 +322,42 @@ export function generatePlan(
   subjects: Subject[],
   settings: UserSettings,
   weekStart: Date,
-  exams: Exam[] = []
+  exams: Exam[] = [],
+  assignments: Assignment[] = []
 ): { freeSlots: FreeSlot[]; sessions: PlannedSession[] } {
   const activeEntries = entries.filter((e) => isEntryActiveForWeek(e, weekStart))
   const freeSlots = computeFreeSlots(entries, settings, weekStart)
-  const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: activeEntries, exams, weekStart })
+  const sessions = allocateStudyPlan({ freeSlots, subjects, settings, timetable: activeEntries, exams, assignments, weekStart })
   return { freeSlots, sessions }
+}
+
+/**
+ * Given this week's remaining free time (timetable + already-scheduled sessions subtracted
+ * out), finds the best slot to make up `minutesNeeded` of lost study time for a subject after
+ * a session gets aborted — today or any later day this week. Returns null if nothing fits.
+ */
+export function findCatchUpSlot(
+  entries: TimetableEntry[],
+  sessions: Array<Pick<StudySession, 'day_of_week' | 'start_minute' | 'end_minute' | 'status'>>,
+  settings: UserSettings,
+  weekStart: Date,
+  minutesNeeded: number,
+  today: Date = new Date()
+): { day_of_week: DayOfWeek; start_minute: number; end_minute: number } | null {
+  const busySessions = sessions.filter((s) => s.status !== 'skipped')
+  const freeSlots = computeFreeSlots(entries, settings, weekStart, busySessions)
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+  const candidates = freeSlots.filter((slot) => {
+    const slotDate = addDays(weekStart, (slot.day_of_week + 6) % 7)
+    if (slotDate < todayStart) return false
+    return slot.end_minute - slot.start_minute >= settings.min_session_minutes
+  })
+  if (candidates.length === 0) return null
+
+  const exact = candidates.find((s) => s.end_minute - s.start_minute >= minutesNeeded)
+  const chosen =
+    exact ?? candidates.slice().sort((a, b) => b.end_minute - b.start_minute - (a.end_minute - a.start_minute))[0]
+  const duration = Math.min(minutesNeeded, chosen.end_minute - chosen.start_minute)
+  return { day_of_week: chosen.day_of_week, start_minute: chosen.start_minute, end_minute: chosen.start_minute + duration }
 }

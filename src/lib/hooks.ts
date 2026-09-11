@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { settingsApi, subjectsApi, timetableApi, sessionsApi, examsApi } from './api'
-import type { Difficulty, Exam, StudySession, Subject, TimetableEntry, UserSettings } from '../types'
+import { settingsApi, subjectsApi, timetableApi, sessionsApi, examsApi, assignmentsApi, profilesApi } from './api'
+import type { Assignment, Difficulty, Exam, Profile, StudySession, Subject, TimetableEntry, UserSettings } from '../types'
 
 export function useSubjects() {
   const { user } = useAuth()
@@ -157,6 +157,75 @@ export function useExams() {
   }
 
   return { exams, loading, create, update, remove, reload }
+}
+
+export function useAssignments() {
+  const { user } = useAuth()
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      setAssignments(await assignmentsApi.list(user.id))
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const create = async (input: Parameters<typeof assignmentsApi.create>[1]) => {
+    if (!user) return
+    const assignment = await assignmentsApi.create(user.id, input)
+    setAssignments((prev) => [...prev, assignment].sort((a, b) => a.due_date.localeCompare(b.due_date)))
+    return assignment
+  }
+
+  const update = async (id: string, patch: Parameters<typeof assignmentsApi.update>[1]) => {
+    const updated = await assignmentsApi.update(id, patch)
+    setAssignments((prev) => prev.map((a) => (a.id === id ? updated : a)))
+    return updated
+  }
+
+  const remove = async (id: string) => {
+    await assignmentsApi.remove(id)
+    setAssignments((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  return { assignments, loading, create, update, remove, reload }
+}
+
+export function useProfile() {
+  const { user } = useAuth()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!user) return
+    setLoading(true)
+    try {
+      setProfile(await profilesApi.get(user.id))
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const update = async (patch: Parameters<typeof profilesApi.update>[1]) => {
+    if (!user) return
+    const updated = await profilesApi.update(user.id, patch)
+    setProfile(updated)
+    return updated
+  }
+
+  return { profile, loading, update, reload }
 }
 
 export function useWeekSessions(weekStart: string) {

@@ -61,6 +61,7 @@ function SessionBlock({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      title={session.placement_reason ?? undefined}
       className={`group absolute inset-x-0.5 overflow-hidden rounded-md px-1.5 py-1 text-left text-[11px] leading-tight text-white shadow-sm ${
         isDragging ? 'z-20 opacity-90 cursor-grabbing' : 'cursor-grab'
       } ${session.status === 'completed' ? 'opacity-60' : ''} ${session.status === 'skipped' ? 'opacity-30 line-through' : ''}`}

@@ -9,6 +9,8 @@ create extension if not exists "pgcrypto";
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   full_name text,
+  share_code text unique not null default substr(md5(random()::text || clock_timestamp()::text), 1, 8),
+  sharing_enabled boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -95,6 +97,8 @@ create table if not exists public.study_sessions (
   week_start date not null,
   skip_reason text,
   is_review boolean not null default false,
+  placement_reason text,
+  catch_up_dismissed boolean not null default false,
   created_at timestamptz not null default now(),
   constraint valid_session_range check (end_minute > start_minute)
 );
@@ -118,6 +122,8 @@ create table if not exists public.exams (
   start_minute integer not null check (start_minute >= 0 and start_minute < 1440),
   end_minute integer not null check (end_minute > 0 and end_minute <= 1440),
   notes text,
+  outcome_rating smallint check (outcome_rating is null or outcome_rating between 1 and 5),
+  outcome_notes text,
   created_at timestamptz not null default now(),
   constraint valid_exam_range check (end_minute > start_minute)
 );
@@ -128,6 +134,26 @@ create policy "Exams are owner-only" on public.exams
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create index if not exists exams_user_date_idx on public.exams (user_id, exam_date);
+
+-- ---------------------------------------------------------------------------
+-- assignments (homework/deliverable deadlines — same deadline-urgency treatment as exams)
+-- ---------------------------------------------------------------------------
+create table if not exists public.assignments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  subject_id uuid not null references public.subjects (id) on delete cascade,
+  title text not null,
+  due_date date not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.assignments enable row level security;
+
+create policy "Assignments are owner-only" on public.assignments
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists assignments_user_date_idx on public.assignments (user_id, due_date);
 
 -- ---------------------------------------------------------------------------
 -- user_settings
@@ -153,3 +179,34 @@ alter table public.user_settings enable row level security;
 
 create policy "Settings are owner-only" on public.user_settings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Shared free-time lookup — lets one user compare their free time against a
+-- classmate's, without ever exposing that classmate's subjects, sessions, or
+-- any other personal data. Returns bare day/time busy blocks, and only for a
+-- profile that has explicitly turned sharing on.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_shared_busy_blocks(p_share_code text)
+returns table (day_of_week smallint, start_minute integer, end_minute integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_user_id uuid;
+begin
+  select id into target_user_id from public.profiles
+    where share_code = p_share_code and sharing_enabled = true;
+
+  if target_user_id is null then
+    return;
+  end if;
+
+  return query
+    select te.day_of_week, te.start_minute, te.end_minute
+    from public.timetable_entries te
+    where te.user_id = target_user_id;
+end;
+$$;
+
+grant execute on function public.get_shared_busy_blocks(text) to authenticated;

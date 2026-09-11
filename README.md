@@ -60,6 +60,26 @@ devices via Supabase.
   give a reason the app reacts to it directly, and gets firmer if the same reason
   keeps repeating within two weeks (e.g. "got distracted" three times running gets
   called out as a pattern, not treated as a one-off).
+- **"Why is this here?"** — click any planned session to see a one-line explanation
+  of why the planner put it there (difficulty, an approaching deadline, your
+  productive hours, or a fixed weekly target), instead of a plan you have to trust
+  blindly.
+- **Assignment/syllabus deadline import** — same scan-a-photo-or-PDF import as
+  exams, but for homework and deliverable due dates; assignments get the same
+  deadline-urgency ramp-up as exams, pulling extra study time toward a subject
+  the closer its next due date gets.
+- **Catch-up on missed time** — when a focus session gets aborted, the planner
+  looks for the best remaining slot this week to make up that lost time for the
+  same subject, and offers to add it with one click (or dismiss it).
+- **Falling-behind alerts** — mid-week, not just in hindsight: if a subject's
+  completed time is meaningfully behind how much of the week has already gone
+  by, a banner calls it out while there's still time to act.
+- **Compare free time with a classmate** — turn on sharing to get a short code,
+  then anyone with it can see the windows this week when you're both actually
+  free — handy for planning group study. Only bare busy/free times are ever
+  shared, never subjects, sessions, or any other personal data.
+- **Post-exam retrospective** — once an exam's date has passed, rate how it went
+  (1-5 stars) right from the exam list, building a record of outcomes over time.
 - **Installable PWA** — add to your home screen / dock on desktop or mobile;
   works offline for the app shell.
 - **Account sync** — sign in with email, and your data follows you across

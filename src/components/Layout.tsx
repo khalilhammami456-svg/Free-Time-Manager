@@ -6,6 +6,8 @@ const NAV_ITEMS = [
   { to: '/timetable', label: 'Timetable', icon: '🗓️' },
   { to: '/subjects', label: 'Subjects', icon: '📚' },
   { to: '/exams', label: 'Exams', icon: '📝' },
+  { to: '/assignments', label: 'Assignments', icon: '📌' },
+  { to: '/compare', label: 'Compare', icon: '🤝' },
   { to: '/stats', label: 'Progress', icon: '📊' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
