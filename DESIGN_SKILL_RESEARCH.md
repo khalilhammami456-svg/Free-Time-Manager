@@ -3,6 +3,8 @@
 > Prepared 2026-10-04. Mission: equip the environment to later build a deeply personal digital notebook for one person.
 > **Nothing of the app has been built.** This repo (`Free-Time-Manager`) is an unrelated Vite + React 19 + Tailwind 4 planner; I used it only as the host for skills and notes and changed no app code or dependencies.
 >
+> **Update (after the production spec arrived):** see [`design-research/NOTEBOOK_BUILD_FINDINGS.md`](design-research/NOTEBOOK_BUILD_FINDINGS.md). The spec overrides two recommendations below: it mandates `react-pageflip` (I advised a custom page-turn; the library works with React 19 but is unmaintained — tested, caveats documented) and a blue-lily identity. Skills grew to 16.
+>
 > Companion files: [`design-research/`](design-research/README.md) · installed-skill provenance: [`design-research/skills/INSTALLED.md`](design-research/skills/INSTALLED.md)
 >
 > **Honesty about method.** Web search worked; direct page fetch was blocked by the sandbox egress proxy for `motion.dev`, `awwwards.com` and `scrollytelling.ai`. GitHub repos were cloned and read in full. npm facts (versions, dates, licenses, sizes) come from the live registry. Download counts were unavailable. Anything I could not open myself is marked **unverified**. Star counts quoted in blogs were not independently verified and I did not use them to pick anything.

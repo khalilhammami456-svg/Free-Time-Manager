@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# PRIVATE personal photos/derived assets - never commit (see notebook-assets/README.md)
+notebook-assets/source/
+notebook-assets/_incoming/
+notebook-assets/private/
+notebook-assets/stickers-private/
+notebook-assets/models/

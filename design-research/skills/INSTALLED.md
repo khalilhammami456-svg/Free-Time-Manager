@@ -1,6 +1,6 @@
 # Installed skills — provenance, evaluation, security review
 
-Installed into `.claude/skills/` (project scope). Every source was cloned shallow, read, and scanned
+Installed into `.claude/skills/` (project scope) — 16 skills total. Every source was cloned shallow, read, and scanned
 (executables, network calls, obfuscation, prompt-injection strings) **before** copying.
 Re-create on any machine/project with `design-research/scripts/install-skills.sh <target-dir>` (pinned SHAs, file copy only).
 
@@ -10,6 +10,9 @@ Re-create on any machine/project with `design-research/scripts/install-skills.sh
 | `motion-design` | [lottiefiles/motion-design-skill](https://github.com/lottiefiles/motion-design-skill) | `f9a8a04` (2026-05-18) | MIT | Agent skill, pure markdown (17 files) | The only skill found that maps **emotion → motion** (`director/emotion-mapping.md` has a *Tenderness* and *Curiosity* row), plus Disney principles, motion personality archetypes, choreography. This is the "motion with personality" brief. Library-agnostic. |
 | `emil-design-eng`, `animate`, `review-animations`, `find-animation-opportunities` | [emilkowalski/skills](https://github.com/emilkowalski/skills) | `e8a175d` (2026-10-02) | MIT | Agent skills, pure markdown | Craft-level correctness: easing/duration tables, interruptibility, never `scale(0)`, springs, gestures, clip-path reveals, `@starting-style`, transform/opacity-only rule, reduced motion. Acts as the **quality brake** against over-animating. Written by a Vercel/Linear design engineer. |
 | `gsap-core`, `gsap-timeline`, `gsap-scrolltrigger`, `gsap-plugins`, `gsap-react`, `gsap-performance` | [greensock/gsap-skills](https://github.com/greensock/gsap-skills) (official) | `aed9cfd` (2026-04-21) | MIT (skills); GSAP itself: free "no charge" license | Agent skills, pure markdown | Correct GSAP usage (incl. `useGSAP`, ScrollTrigger, SplitText, Flip, Draggable, MorphSVG, DrawSVG — all free since Webflow's acquisition). Prevents the usual hallucinated/outdated GSAP API. Only 6 of 8 installed (see below). |
+
+| `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) (official) | `8a1541c` (2026-09-28) | see LICENSE.txt in dir | Agent skill, 1 markdown file | **Added after reading the notebook spec**, whose Quick-Start step 2 names it explicitly alongside Impeccable. Earlier rejected as redundant; the spec's explicit requirement overrides that. Overlap with Impeccable is real: when both trigger, Impeccable's `PRODUCT.md`/`shape` flow leads and this skill supplies the anti-"AI analog look" calibration list. |
+| `accessibility-inclusive-design`, `ux-writing-content-design`, `interaction-patterns-components` | [hueyexe/frontend-agent-skills](https://github.com/hueyexe/frontend-agent-skills) | `2841c07` (2026-08-02) | MIT | Agent skills, markdown only (SKILL.md + 4 reference files each) | Named in spec §78.1. Chosen 3 of its 9 because the spec has dedicated chapters for them: WCAG 2.2 AA (Ch.43), UX writing/microcopy (Ch.53), interaction patterns (Ch.38/39). Other 6 skipped (forms/checkout, research, IA, design-systems, visual-composition, usability) — redundant with Impeccable or off-scope. |
 
 ## Security review notes
 

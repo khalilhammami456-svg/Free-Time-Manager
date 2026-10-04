@@ -1,0 +1,4 @@
+{ "name": "notebook-poc-integration", "private": true, "type": "module",
+  "scripts": { "dev": "vite --port 5199 --host 127.0.0.1" },
+  "dependencies": { "@bunnio/rembg-web": "1.0.2", "fabric": "7.4.0", "idb-keyval": "6.3.0", "onnxruntime-web": "1.30.0", "react": "19.3.0", "react-dom": "19.3.0", "react-pageflip": "2.0.3" },
+  "devDependencies": { "@vitejs/plugin-react": "6.1.1", "vite": "8.3.2" } }

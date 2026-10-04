@@ -35,4 +35,12 @@ for s in gsap-core gsap-timeline gsap-scrolltrigger gsap-plugins gsap-react gsap
   cp -R "$WORK/gsap/skills/$s" "$TARGET/$s"
 done
 cp "$WORK/gsap/LICENSE" "$TARGET/gsap-core/LICENSE"
+fetch fd anthropics/skills 8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4
+cp -R "$WORK/fd/skills/frontend-design" "$TARGET/frontend-design"   # named by the notebook spec (Ch.B step 2)
+
+fetch hx hueyexe/frontend-agent-skills 2841c079dd8a9c634882227194dc42e25227710d
+for s in accessibility-inclusive-design ux-writing-content-design interaction-patterns-components; do
+  cp -R "$WORK/hx/$s" "$TARGET/$s"
+done
+cp "$WORK/hx/LICENSE" "$TARGET/accessibility-inclusive-design/LICENSE"
 echo "Installed into $TARGET"

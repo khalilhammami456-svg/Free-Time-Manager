@@ -4,6 +4,7 @@ Knowledge base for the future personal-notebook project. **Start with [`../DESIG
 
 | Path | What it is |
 |---|---|
+| [`NOTEBOOK_BUILD_FINDINGS.md`](NOTEBOOK_BUILD_FINDINGS.md) | **Read second.** Tested results for the notebook spec's stack, model comparison, WCAG fixes for the spec's colour tokens, spec inconsistencies, blocked-host list |
 | [`DESIGN_PRINCIPLES.md`](DESIGN_PRINCIPLES.md) | One-page checklist distilled from the research — read before any design decision |
 | [`skills/INSTALLED.md`](skills/INSTALLED.md) | Installed skills: source, pinned SHA, license, security review, rejects |
 | [`scripts/install-skills.sh`](scripts/install-skills.sh) | Re-installs the curated skills into any project (pinned, copy-only) |
@@ -15,4 +16,4 @@ Knowledge base for the future personal-notebook project. **Start with [`../DESIG
 | [`resources/sources.md`](resources/sources.md) | Every URL consulted |
 | `interaction/` | Reserved: add prototypes/notes once the concept exists (principles live in the main doc §10) |
 
-Skills live in `../.claude/skills/` (12 skills, 860 KB, no executables).
+Skills live in `../.claude/skills/` (16 skills, markdown only, no executables). Asset pipeline: [`../notebook-assets/README.md`](../notebook-assets/README.md). **Repo is public — private photos/spec are gitignored.**
